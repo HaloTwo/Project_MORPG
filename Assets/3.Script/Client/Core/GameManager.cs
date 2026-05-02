@@ -80,7 +80,9 @@ public sealed class GameManager : MonoBehaviour
         }
     }
 
-    // 이미 캐릭터 선택 씬에서 선택된 캐릭터가 있으면 게임 씬 시작 시 바로 적용합니다.
+    /// <summary>
+    /// 이미 캐릭터 선택 씬에서 선택된 캐릭터가 있으면 게임 씬 시작 시 바로 적용합니다.
+    /// </summary>
     private void ApplySelectedCharacterIfExists()
     {
         CharacterData selectedCharacter = CharacterSession.Instance.SelectedCharacter;

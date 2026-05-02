@@ -8,6 +8,7 @@ public sealed class NetworkManager : MonoBehaviour
     [SerializeField] private int maxPacketsPerFrame = 64;
 
     private readonly PacketQueue receiveQueue = new PacketQueue();
+    private MockServerSimulator mockServer;
 
     public PacketDispatcher Dispatcher { get; private set; } = new PacketDispatcher();
     public bool IsConnected { get; private set; }
@@ -40,6 +41,7 @@ public sealed class NetworkManager : MonoBehaviour
         }
 
         instance = this;
+        mockServer = new MockServerSimulator();
         DontDestroyOnLoad(gameObject);
     }
 
@@ -80,8 +82,11 @@ public sealed class NetworkManager : MonoBehaviour
 
         if (useLocalSimulation)
         {
-            MockReceivePacket(packet);
+            mockServer.HandleClientPacket(packet, receiveQueue);
+            return;
         }
+
+        // TODO: 실제 TCP/Socket 송신 코드는 여기로 들어옵니다.
     }
 
     // 실제 서버에서 받은 패킷과 같은 흐름으로 테스트 패킷을 넣습니다.
