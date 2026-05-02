@@ -2,6 +2,8 @@
 
 #include "protocol/PacketCodec.h"
 
+#include <utility>
+
 AuthService::AuthService(std::shared_ptr<IAccountRepository> accountRepository)
     : accountRepository_(std::move(accountRepository))
 {

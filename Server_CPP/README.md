@@ -38,6 +38,32 @@ CHARACTER_LIST_END
 
 ## 빌드
 
+### Visual Studio에서 실행
+
+가장 쉬운 방법은 서버 전용 솔루션을 여는 것입니다.
+
+```text
+Server_CPP/ProjectMORPGServer.sln
+```
+
+Visual Studio에서 위 솔루션을 열고:
+
+```text
+구성: Debug
+플랫폼: x64
+시작 프로젝트: ProjectMORPGServer
+```
+
+로 맞춘 뒤 `F5` 또는 `Ctrl + F5`로 실행합니다.
+
+정상 실행되면 콘솔에 아래 로그가 출력됩니다.
+
+```text
+[Server] Listening on port 7777
+```
+
+### CMake로 빌드
+
 Windows PowerShell 기준:
 
 ```powershell

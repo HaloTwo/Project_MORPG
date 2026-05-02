@@ -3,6 +3,7 @@
 #include "protocol/PacketCodec.h"
 
 #include <iostream>
+#include <utility>
 
 ClientSession::ClientSession(SOCKET socket, std::shared_ptr<AuthService> authService)
     : socket_(socket),
