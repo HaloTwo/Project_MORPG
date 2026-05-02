@@ -3,16 +3,23 @@
 # ⚔️ 프로젝트 개요
 
 > Unity 6 기반 3D 쿼터뷰 MORPG 클라이언트 프로토타입입니다.  
-> 실제 서버 연동 전 단계에서 로그인, 캐릭터 선택, 씬 전환, 패킷 처리, 조이스틱 이동 구조를 먼저 설계했습니다.
+> 로그인, 캐릭터 선택, 씬 전환, 패킷 처리, 조이스틱 이동을 중심으로  
+> 온라인 RPG 클라이언트의 기본 구조를 설계하고 있습니다.
 
-> 추후 C++ IOCP 서버와 MariaDB 연동을 고려하여  
-> NetworkManager, PacketDispatcher, PacketQueue, Packet 구조를 분리하고,  
-> 현재는 MockServerSimulator를 통해 서버 응답을 로컬 시뮬레이션합니다.
+> 본 프로젝트는 단순한 싱글 플레이 데모가 아니라,  
+> 추후 직접 구현할 C++ IOCP 서버와 MariaDB 연동을 전제로 한  
+> Server-Driven Client 구조를 목표로 합니다.
+
+> 현재는 실제 서버 개발 전 단계이므로  
+> MockServerSimulator를 통해 서버 응답을 로컬에서 시뮬레이션하고 있으며,  
+> 이후 Mock 계층을 C++ 서버 + MariaDB 기반 구조로 교체할 예정입니다.
 
 • 개발 인원: 1인  
+• 개발 기간: 2026.05 ~ 진행 중  
 • 개발 환경: Unity 6, C#  
-• 프로젝트 성격: 모바일 쿼터뷰 MORPG 클라이언트 구조 설계  
-• 주요 기술: uGUI, Scene Flow, Mock Server, Packet Architecture, Virtual Joystick, Character Data Structure
+• 프로젝트 성격: 온라인 MORPG 클라이언트 구조 설계 및 서버 연동 기반 구축  
+• 주요 기술: uGUI, Scene Flow, Packet Architecture, Server-Driven Client, Virtual Joystick, Character Data Structure  
+• 확장 목표: C++ IOCP 서버 직접 구현, TCP Socket 통신, MariaDB 기반 계정 / 캐릭터 / 인벤토리 저장 구조
 
 ---
 
@@ -21,25 +28,36 @@
 - 🎮 프로젝트 목표
 - 🧭 씬 플로우 구조
 - 🕹 조이스틱 기반 쿼터뷰 이동
-- 🌐 네트워크 / 패킷 구조
-- 🧪 Mock Server Simulation
+- 🌐 서버 연동을 고려한 패킷 구조
+- 🧪 Local Server Simulation
 - 👤 캐릭터 / 직업 데이터 구조
 - 🧩 Unity UI 구조
 - 🗂 폴더 구조
-- 🚀 향후 개발 계획
+- 🚀 서버 / DB 연동 계획
+- ✅ 현재 구현 상태
 
 ---
 
 # 🎮 프로젝트 목표
 
-> 본 프로젝트는 단순한 싱글 플레이 데모가 아니라,  
-> 추후 온라인 MORPG로 확장 가능한 클라이언트 구조를 설계하는 것을 목표로 했습니다.
+> 온라인 MORPG에서 필요한 로그인, 캐릭터 선택, 게임 입장, 이동, 스킬 사용 흐름을  
+> 서버 연동을 고려한 클라이언트 구조로 먼저 설계하는 것을 목표로 했습니다.
 
-초기 단계에서는 실제 서버와 DB를 바로 연결하지 않고,  
-클라이언트 내부에 Mock 서버를 두어 로그인, 캐릭터 선택, 게임 입장 흐름을 먼저 검증했습니다.
+초기 단계부터 UI 로직, 패킷 구조, 캐릭터 데이터, 네트워크 진입점을 분리하여  
+나중에 실제 C++ 서버와 MariaDB가 붙더라도 클라이언트 구조를 크게 갈아엎지 않도록 구성하고 있습니다.
 
-이를 통해 이후 C++ IOCP 서버와 MariaDB를 연결할 때  
-Unity 클라이언트의 UI 및 패킷 처리 구조를 크게 변경하지 않도록 구성했습니다.
+현재는 로컬 시뮬레이션 방식으로 서버 응답을 흉내 내지만,  
+최종 목표는 아래 구조입니다.
+
+```text
+Unity Client
+→ C++ IOCP Server
+→ MariaDB
+```
+
+이 구조를 통해 클라이언트는 요청만 보내고,  
+로그인 검증, 캐릭터 데이터 조회, 장비 / 인벤토리 저장, 멀티플레이 동기화는  
+서버가 담당하도록 확장할 예정입니다.
 
 ---
 
@@ -61,13 +79,13 @@ LoginScene
   로그인 UI 표시 및 LoginRequest 전송
 
 - `LoadingScene`  
-  다음 씬 로딩 처리
+  다음 씬 비동기 로딩 처리
 
 - `CharacterSelectScene`  
-  서버에서 받은 캐릭터 목록 표시
+  서버 응답으로 받은 캐릭터 목록 표시
 
 - `GameScene`  
-  선택한 캐릭터로 게임 월드 입장
+  선택한 캐릭터 데이터 기반으로 게임 월드 입장
 
 ## 관련 코드
 
@@ -83,11 +101,11 @@ Assets/3.Script/Client/Scene/SceneNames.cs
 
 # 🕹 조이스틱 기반 쿼터뷰 이동
 
-> 마비노기 모바일과 유사한 쿼터뷰 시점에서  
-> 가상 조이스틱을 사용해 캐릭터를 이동하도록 구현했습니다.
+> 모바일 쿼터뷰 MORPG 조작감을 목표로  
+> 가상 조이스틱 기반 캐릭터 이동을 구현했습니다.
 
-초기에는 디아블로 / 로스트아크 방식의 클릭 이동을 구현했지만,  
-모바일 MORPG 방향성에 맞춰 조이스틱 이동 방식으로 변경했습니다.
+초기에는 클릭 이동 방식을 테스트했지만,  
+모바일 MORPG 방향성에 맞춰 가상 조이스틱 방식으로 변경했습니다.
 
 ## 구현 방식
 
@@ -96,7 +114,7 @@ Assets/3.Script/Client/Scene/SceneNames.cs
 - 에디터 테스트용 WASD / 방향키 입력 지원
 - 카메라 방향 기준 이동 벡터 변환
 - 이동 시작 / 이동 중 / 정지 시점 감지
-- 이동 패킷 전송 구조 준비
+- MovePacket / StopPacket 전송 구조 준비
 
 ## 관련 코드
 
@@ -109,13 +127,25 @@ Assets/3.Script/Client/Camera/QuarterViewCameraController.cs
 
 ---
 
-# 🌐 네트워크 / 패킷 구조
+# 🌐 서버 연동을 고려한 패킷 구조
 
 > 실제 TCP 서버 연동을 고려해  
 > 네트워크 송신, 수신 큐, 패킷 분배 구조를 분리했습니다.
 
-현재는 실제 서버가 없기 때문에 `MockServerSimulator`를 사용하지만,  
-나중에 `NetworkManager.SendPacket()` 내부를 TCP Socket 송신 코드로 교체하면  
+클라이언트는 직접 DB에 접근하지 않고,  
+항상 서버로 요청 패킷을 보내는 구조를 목표로 합니다.
+
+```text
+Unity Client
+→ Request Packet
+→ C++ Server
+→ DB 조회 / 게임 로직 처리
+→ Response Packet
+→ Unity Client
+```
+
+현재는 실제 서버가 없기 때문에 `MockServerSimulator`가 응답을 생성하지만,  
+향후 `NetworkManager.SendPacket()` 내부를 TCP Socket 송신 코드로 교체하면  
 기존 UI와 게임 로직은 그대로 사용할 수 있도록 설계했습니다.
 
 ## 패킷 흐름
@@ -124,7 +154,7 @@ Assets/3.Script/Client/Camera/QuarterViewCameraController.cs
 Unity UI / Player Input
 → Packet 생성
 → NetworkManager.SendPacket()
-→ MockServerSimulator 또는 실제 서버
+→ Local Server Simulation 또는 실제 C++ 서버
 → PacketQueue
 → PacketDispatcher
 → 각 시스템으로 이벤트 전달
@@ -133,7 +163,7 @@ Unity UI / Player Input
 ## 구성
 
 - `NetworkManager`  
-  패킷 송신 입구
+  서버 통신 진입점
 
 - `PacketQueue`  
   수신 패킷을 Unity 메인 스레드에서 처리하기 위한 큐
@@ -156,13 +186,17 @@ Assets/3.Script/Server/Packet/PacketId.cs
 
 ---
 
-# 🧪 Mock Server Simulation
+# 🧪 Local Server Simulation
 
 > 실제 C++ 서버 개발 전에도  
-> 로그인, 캐릭터 목록, 게임 입장 흐름을 테스트할 수 있도록 Mock 서버를 구현했습니다.
+> 로그인, 캐릭터 목록, 게임 입장 흐름을 테스트할 수 있도록  
+> 로컬 서버 시뮬레이션 구조를 구현했습니다.
 
-Mock 서버는 DB 없이 코드 내부에서 임시 캐릭터 데이터를 생성하고,  
+현재 `MockServerSimulator`는 DB 없이 코드 내부에서 임시 캐릭터 데이터를 생성하고,  
 Unity가 보낸 요청 패킷에 대해 서버처럼 응답합니다.
+
+이 구조는 최종 서버 구조를 대체하려는 목적이 아니라,  
+클라이언트 UI / 패킷 / 씬 흐름을 먼저 검증하기 위한 임시 계층입니다.
 
 ## 현재 지원 흐름
 
@@ -175,7 +209,7 @@ EnterGameRequest
 → EnterGameResponse
 ```
 
-## Mock 캐릭터
+## 임시 캐릭터
 
 ```text
 Leon / 전사
@@ -199,7 +233,7 @@ Assets/3.Script/Shared/Protocol/EnterGameResponsePacket.cs
 # 👤 캐릭터 / 직업 데이터 구조
 
 > 온라인 RPG에서 필요한 계정, 캐릭터, 직업, 장비, 인벤토리, 스킬 데이터를  
-> 서버 연동을 고려해 분리했습니다.
+> 서버 / DB 연동을 고려해 분리했습니다.
 
 현재 직업은 3개로 구성했습니다.
 
@@ -317,38 +351,53 @@ Assets
 
 ---
 
-# 🚀 향후 개발 계획
+# 🚀 서버 / DB 연동 계획
 
-## 1. C++ 서버 연동
+## 1. C++ IOCP 서버 직접 구현
 
-현재 `MockServerSimulator`가 담당하는 부분을  
-C++ 서버와 TCP Socket 통신으로 교체할 예정입니다.
+현재 로컬 시뮬레이션이 담당하는 로그인 / 캐릭터 목록 / 게임 입장 응답을  
+직접 구현한 C++ IOCP 서버로 교체할 예정입니다.
 
 ```text
 현재
-Unity → MockServerSimulator
+Unity Client
+→ Local Server Simulation
 
 목표
-Unity → C++ IOCP Server → MariaDB
+Unity Client
+→ C++ IOCP Server
+→ MariaDB
 ```
 
-## 2. MariaDB 연동
+## 2. TCP Socket 통신
 
-계정, 캐릭터, 장비, 인벤토리, 스킬 데이터를 DB에 저장하고  
-서버가 로그인 시 DB에서 데이터를 조회하도록 확장할 예정입니다.
+Unity `NetworkManager`의 송신 구조를 실제 TCP Socket 송신으로 교체하고,  
+서버에서 받은 패킷은 `PacketQueue`를 통해 Unity 메인 스레드에서 처리하도록 확장할 예정입니다.
 
-## 3. 캐릭터 모델 / 애니메이션 적용
+## 3. MariaDB 연동
 
-현재는 임시 Capsule 기반이며,  
-추후 직업별 모델과 Idle / Move / Skill 애니메이션을 적용할 예정입니다.
+서버에서 MariaDB를 사용해 계정, 캐릭터, 장비, 인벤토리, 스킬 데이터를 조회 / 저장하도록 구현할 예정입니다.
 
-## 4. 멀티플레이 동기화
+```text
+accounts
+characters
+items
+equipment
+character_skills
+```
+
+## 4. 서버 권위 구조 확장
+
+클라이언트는 입력과 요청만 보내고,  
+이동 검증, 스킬 사용 가능 여부, 데미지 판정, 보상 지급은 서버가 판단하는 구조로 확장할 예정입니다.
+
+## 5. 멀티플레이 동기화
 
 원격 플레이어 생성, 이동 보간, 스킬 사용 브로드캐스트 구조를 확장할 예정입니다.
 
 ```text
 Player A 이동
-→ Server
+→ C++ Server
 → 주변 Player B, C에게 이동 패킷 전송
 → RemotePlayerController에서 보간 이동
 ```
@@ -360,8 +409,9 @@ Player A 이동
 - Unity 6 프로젝트 구조 정리
 - 로그인 / 로딩 / 캐릭터 선택 / 게임 씬 분리
 - uGUI 기반 UI 생성
-- Mock 로그인 흐름 구현
+- Local Server Simulation 기반 로그인 흐름 구현
 - 전사 / 궁수 / 도적 캐릭터 데이터 구성
 - 조이스틱 기반 쿼터뷰 이동 구현
 - 네트워크 패킷 구조 분리
-- Mock 서버 시뮬레이션 구현
+- Server-Driven Client 구조를 고려한 데이터 / 패킷 / UI 흐름 분리
+- C++ IOCP 서버 및 MariaDB 연동을 위한 기반 구조 설계
