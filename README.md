@@ -1,4 +1,4 @@
-# 🎮 Unity 6 3D Quarter-View MORPG Client Prototype
+# 🎮 Unity 6 3D Quarter-View MORPG
 
 # ⚔️ 프로젝트 개요
 
