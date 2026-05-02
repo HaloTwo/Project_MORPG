@@ -19,6 +19,7 @@
 • 개발 환경: Unity 6, C#  
 • 프로젝트 성격: 온라인 MORPG 클라이언트 구조 설계 및 서버 연동 기반 구축  
 • 주요 기술: uGUI, Scene Flow, Packet Architecture, Server-Driven Client, Virtual Joystick, Character Data Structure  
+• 서버 구조: C++ TCP 로그인 서버 프로토타입 구현, 추후 IOCP 구조로 확장 예정  
 • 확장 목표: C++ IOCP 서버 직접 구현, TCP Socket 통신, MariaDB 기반 계정 / 캐릭터 / 인벤토리 저장 구조
 
 ---
@@ -29,6 +30,7 @@
 - 🧭 씬 플로우 구조
 - 🕹 조이스틱 기반 쿼터뷰 이동
 - 🌐 서버 연동을 고려한 패킷 구조
+- 🖥 C++ 서버 프로토타입
 - 🧪 Local Server Simulation
 - 👤 캐릭터 / 직업 데이터 구조
 - 🧩 Unity UI 구조
@@ -182,6 +184,70 @@ Assets/3.Script/Server/Network/PacketQueue.cs
 Assets/3.Script/Server/Network/PacketDispatcher.cs
 Assets/3.Script/Server/Packet/PacketBase.cs
 Assets/3.Script/Server/Packet/PacketId.cs
+```
+
+---
+
+# 🖥 C++ 서버 프로토타입
+
+> Unity 클라이언트와 실제 TCP Socket으로 연결할 수 있는  
+> C++ 서버 프로토타입을 별도 폴더로 구성했습니다.
+
+현재 서버는 학습과 구조 검증을 위해 블로킹 TCP + 세션별 thread 방식으로 작성했으며,  
+로그인 / 캐릭터 목록 / 게임 입장 요청을 처리합니다.
+
+추후 이 구조를 기반으로 IOCP 비동기 세션 처리, MariaDB 조회, 바이너리 패킷 직렬화 구조로 확장할 예정입니다.
+
+## 현재 서버 구조
+
+```text
+Server_CPP
+├─ src
+│  ├─ net
+│  │  ├─ TcpServer
+│  │  └─ ClientSession
+│  ├─ protocol
+│  │  └─ PacketCodec
+│  ├─ service
+│  │  └─ AuthService
+│  ├─ repository
+│  │  ├─ IAccountRepository
+│  │  └─ MockAccountRepository
+│  └─ domain
+│     ├─ AccountData
+│     └─ CharacterData
+└─ CMakeLists.txt
+```
+
+## 현재 지원 명령
+
+```text
+LOGIN test_user mock-token
+ENTER_GAME 101
+PING
+QUIT
+```
+
+## 서버 실행 목표
+
+```text
+Unity Client
+→ C++ TCP Server
+→ IAccountRepository
+→ Mock Data
+```
+
+이후 DB 연동 단계에서는 `MockAccountRepository`를 `MariaDbAccountRepository`로 교체해  
+실제 계정 / 캐릭터 데이터를 MariaDB에서 조회하도록 확장할 예정입니다.
+
+## 관련 코드
+
+```text
+Server_CPP/src/main.cpp
+Server_CPP/src/net/TcpServer.cpp
+Server_CPP/src/net/ClientSession.cpp
+Server_CPP/src/service/AuthService.cpp
+Server_CPP/src/repository/MockAccountRepository.cpp
 ```
 
 ---
@@ -347,6 +413,14 @@ Assets
 ├─ 6.Materials
 ├─ 8.Audio
 └─ 9.Font
+Server_CPP
+├─ CMakeLists.txt
+└─ src
+   ├─ domain
+   ├─ net
+   ├─ protocol
+   ├─ repository
+   └─ service
 ```
 
 ---
@@ -407,6 +481,7 @@ Player A 이동
 # ✅ 현재 구현 상태
 
 - Unity 6 프로젝트 구조 정리
+- C++ TCP 로그인 서버 프로토타입 추가
 - 로그인 / 로딩 / 캐릭터 선택 / 게임 씬 분리
 - uGUI 기반 UI 생성
 - Local Server Simulation 기반 로그인 흐름 구현
