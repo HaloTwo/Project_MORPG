@@ -4,13 +4,16 @@
 
 > Unity 클라이언트가 모든 데이터를 직접 판단하는 구조가 아니라,  
 > **C++ TCP 서버가 로그인, 회원가입, 캐릭터 생성, 캐릭터 입장 흐름을 검증하고,  
-> MariaDB에 계정/캐릭터 데이터를 저장하는 구조**로 설계한 MORPG 프로젝트입니다.
+> MariaDB에 계정/캐릭터 데이터를 저장하는 구조**로 설계한 MORPG 프로젝트입니다.  
+>
+> 현재는 계정/캐릭터 생성 흐름까지 구현했으며,  
+> 이후 인벤토리, 장비, 전투, 스킬 사용 구조를 서버 검증 방식으로 확장할 예정입니다.
 
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
 - 현재 진행 상황: 개발 3일차
 - 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub
-- 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Character Persistence
+- 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Character Persistence, Inventory/Combat Expansion
 
 ---
 
@@ -18,6 +21,9 @@
 
 이 프로젝트의 목표는 단순히 Unity에서 로그인 UI를 만드는 것이 아니라,  
 **온라인 RPG에서 필요한 서버 중심 구조를 작은 단위부터 직접 구성해보는 것**입니다.
+
+먼저 로그인, 회원가입, 캐릭터 생성, 캐릭터 입장 흐름을 서버와 DB 기반으로 구성하고,  
+이후 인벤토리, 장비, 전투, 스킬 사용 흐름까지 서버 검증 구조로 확장하는 것을 목표로 합니다.
 
 현재는 Blocking TCP 기반 서버와 텍스트 프로토콜을 사용하지만, 구조는 이후 IOCP 서버와 바이너리 패킷으로 확장할 수 있도록 분리했습니다.
 
@@ -40,6 +46,7 @@ Unity는 DB에 직접 접근하지 않고, 서버에 요청만 보냅니다.
 - Unity TCP Client 연결
 - C++ Winsock TCP Server
 - MariaDB 계정 / 캐릭터 저장
+- 캐릭터 기본 스킬 저장 구조
 - 서버 연결 실패 시 종료 팝업 처리
 - Mock 서버 제거 후 실제 서버 흐름으로 전환
 
@@ -255,11 +262,18 @@ CHARACTER_LIST_END
 
 ## 🛠 다음 개발 예정
 
-- 비밀번호 해시 저장 구조 적용
+현재는 로그인, 계정, 캐릭터 생성까지의 서버 기반 흐름을 먼저 구현한 상태입니다.  
+이후에는 실제 RPG 플레이에 필요한 전투와 인벤토리 시스템을 서버 흐름과 연결해 확장할 예정입니다.
+
 - 캐릭터 이름 입력 기능
 - 캐릭터 삭제 기능
+- 인벤토리 아이템 획득 / 사용 / 장착 구조
+- 장비 슬롯 및 스탯 반영 구조
+- 몬스터 기본 AI 및 전투 타겟팅
+- 일반 공격 / 스킬 사용 패킷 구조
+- 데미지 계산과 HP 변경 서버 검증
 - 이동 패킷 서버 검증
-- 전투 / 스킬 패킷 구조 확장
+- 비밀번호 해시 저장 구조 적용
 - Blocking TCP 서버를 IOCP 기반으로 개선
 
 ---
