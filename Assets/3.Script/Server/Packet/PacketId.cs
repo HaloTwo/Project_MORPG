@@ -7,6 +7,10 @@
     CharacterList = 103,
     EnterGameRequest = 104,
     EnterGameResponse = 105,
+    RegisterRequest = 106,
+    RegisterResponse = 107,
+    CreateCharacterRequest = 108,
+    CreateCharacterResponse = 109,
 
     Move = 1001,
     Stop = 1002,

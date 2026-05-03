@@ -20,13 +20,25 @@ ClientCommand PacketCodec::DecodeClientCommand(const std::string& line)
 std::string PacketCodec::EncodeLoginOk(const AccountData& account)
 {
     std::ostringstream stream;
-    stream << "LOGIN_OK accountId=" << account.accountId << " message=MockLoginSuccess";
+    stream << "LOGIN_OK accountId=" << account.accountId << " message=LoginSuccess";
     return stream.str();
 }
 
 std::string PacketCodec::EncodeLoginFail(const std::string& message)
 {
     return "LOGIN_FAIL message=" + message;
+}
+
+std::string PacketCodec::EncodeRegisterOk(const AccountData& account)
+{
+    std::ostringstream stream;
+    stream << "REGISTER_OK accountId=" << account.accountId << " message=RegisterSuccess";
+    return stream.str();
+}
+
+std::string PacketCodec::EncodeRegisterFail(const std::string& message)
+{
+    return "REGISTER_FAIL message=" + message;
 }
 
 std::vector<std::string> PacketCodec::EncodeCharacterList(const std::vector<CharacterData>& characters)
@@ -51,6 +63,16 @@ std::string PacketCodec::EncodeEnterGameOk(const CharacterData& character)
 std::string PacketCodec::EncodeEnterGameFail(const std::string& message)
 {
     return "ENTER_GAME_FAIL message=" + message;
+}
+
+std::string PacketCodec::EncodeCreateCharacterOk(const CharacterData& character)
+{
+    return "CREATE_CHARACTER_OK " + EncodeCharacter(character);
+}
+
+std::string PacketCodec::EncodeCreateCharacterFail(const std::string& message)
+{
+    return "CREATE_CHARACTER_FAIL message=" + message;
 }
 
 std::string PacketCodec::EncodeCharacter(const CharacterData& character)

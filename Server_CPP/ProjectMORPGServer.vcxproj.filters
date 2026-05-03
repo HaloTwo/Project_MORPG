@@ -23,7 +23,7 @@
     <ClCompile Include="src\protocol\PacketCodec.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\repository\MockAccountRepository.cpp">
+    <ClCompile Include="src\repository\MariaDbAccountRepository.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\service\AuthService.cpp">
@@ -49,7 +49,7 @@
     <ClInclude Include="src\repository\IAccountRepository.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\repository\MockAccountRepository.h">
+    <ClInclude Include="src\repository\MariaDbAccountRepository.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\service\AuthService.h">

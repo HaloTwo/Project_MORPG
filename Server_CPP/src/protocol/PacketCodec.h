@@ -23,6 +23,16 @@ public:
     // 로그인 실패 응답을 텍스트 패킷으로 만듭니다.
     static std::string EncodeLoginFail(const std::string& message);
 
+    /// <summary>
+    /// 회원가입 성공 응답을 텍스트 패킷으로 만듭니다.
+    /// </summary>
+    static std::string EncodeRegisterOk(const AccountData& account);
+
+    /// <summary>
+    /// 회원가입 실패 응답을 텍스트 패킷으로 만듭니다.
+    /// </summary>
+    static std::string EncodeRegisterFail(const std::string& message);
+
     // 캐릭터 목록 응답을 텍스트 패킷 묶음으로 만듭니다.
     static std::vector<std::string> EncodeCharacterList(const std::vector<CharacterData>& characters);
 
@@ -31,6 +41,16 @@ public:
 
     // 게임 입장 실패 응답을 텍스트 패킷으로 만듭니다.
     static std::string EncodeEnterGameFail(const std::string& message);
+
+    /// <summary>
+    /// 캐릭터 생성 성공 응답을 텍스트 패킷으로 만듭니다.
+    /// </summary>
+    static std::string EncodeCreateCharacterOk(const CharacterData& character);
+
+    /// <summary>
+    /// 캐릭터 생성 실패 응답을 텍스트 패킷으로 만듭니다.
+    /// </summary>
+    static std::string EncodeCreateCharacterFail(const std::string& message);
 
 private:
     static std::string EncodeCharacter(const CharacterData& character);

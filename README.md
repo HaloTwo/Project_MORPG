@@ -3,489 +3,429 @@
 # ⚔️ 프로젝트 개요
 
 > Unity 6 기반 3D 쿼터뷰 MORPG 클라이언트와  
-> C++ TCP 서버 프로토타입을 함께 설계한 온라인 RPG 구조 프로젝트입니다.
+> C++ TCP 서버, MariaDB를 연동한 서버 주도형 RPG 구조 프로젝트
 
-> 로그인, 캐릭터 선택, 씬 전환, 패킷 처리, 조이스틱 이동을  
-> 단순 싱글 플레이 로직이 아니라 서버 연동을 고려한 구조로 분리했습니다.
+> 로그인, 회원가입, 캐릭터 선택/생성, 게임 입장 흐름을  
+> Unity 클라이언트가 직접 판단하지 않고 서버 요청/응답 기반으로 처리하도록 설계했습니다.
 
-> 현재 Unity 클라이언트는 `MockServerSimulator`를 통해 로컬 서버 응답을 시뮬레이션하며,  
-> 별도 `Server_CPP` 폴더에는 Winsock 기반 C++ TCP 서버 프로토타입을 구현했습니다.
-
-> 최종 목표는 클라이언트가 입력과 요청만 보내고,  
-> C++ 서버가 로그인 검증, 캐릭터 데이터 조회, 이동/전투 검증, DB 저장을 담당하는  
-> Server-Driven MORPG 구조입니다.
-
-• 개발 인원: 1인  
-• 개발 기간: 2026.05 ~ 진행 중  
-• 개발 환경: Unity 6, C# / C++17, Winsock, CMake  
-• 주요 기술: uGUI, Scene Flow, Packet Architecture, Virtual Joystick, TCP Server Prototype  
-• 서버 구조: Blocking TCP + ClientSession별 Thread 방식 프로토타입  
-• 확장 목표: Unity TCP Client 연동, IOCP 서버, MariaDB, 바이너리 패킷 직렬화
+- 개발 인원: 1인
+- 개발 기간: 2026.05 ~ 진행 중
+- 개발 환경: Unity 6, C# / C++17, Winsock, MariaDB
+- 주요 기술: TCP Socket, Packet Dispatcher, Runtime uGUI, Scene Flow, MariaDB Repository
 
 ---
 
 ## 📑 목차
 
-- 🔍 Server-Driven 구조를 목표로 한 이유
-- 🎮 Core Systems (핵심 시스템)
-  - 🧭 씬 플로우 구조
-  - 🌐 클라이언트 패킷 / 네트워크 구조
-  - 🖥 C++ TCP 서버 프로토타입
-  - 🧪 Local Server Simulation
-  - 🕹 조이스틱 기반 쿼터뷰 이동
-  - 👤 캐릭터 / 직업 / 스킬 데이터 구조
-  - 🧩 Runtime uGUI 구조
-- 🗂 프로젝트 폴더 구조
-- 🚀 서버 / DB 확장 계획
-- ✅ 현재 구현 상태
+- 서버 주도형 구조를 선택한 이유
+- 현재 실행 흐름
+- Unity Client 구조
+- C++ TCP Server 구조
+- MariaDB 연동 구조
+- 서버 연결 실패 처리
+- 개발 일지
+- 문제 해결 기록
+- 실행 방법
+- 현재 구현 상태
+- 다음 작업
 
 ---
 
-## 🔍 Server-Driven 구조를 목표로 한 이유
+## 🔍 서버 주도형 구조를 선택한 이유
 
-> MORPG 구조에서는 클라이언트가 모든 데이터를 직접 판단하면  
-> 로그인, 캐릭터 저장, 이동 검증, 전투 판정, 보상 처리에서 신뢰 문제가 발생합니다.
+MORPG에서는 로그인, 캐릭터 생성, 캐릭터 데이터 저장 같은 핵심 정보를 클라이언트가 직접 처리하면 보안과 데이터 일관성 문제가 생깁니다.
 
-> 따라서 초기 클라이언트 단계부터 UI, 데이터, 패킷, 네트워크 진입점을 분리하여  
-> 이후 실제 C++ 서버와 MariaDB가 붙어도 전체 구조를 크게 갈아엎지 않도록 설계했습니다.
-
-현재 Unity 내부에서는 Mock 서버가 응답을 대신 만들지만, 흐름 자체는 서버 요청/응답 구조를 따릅니다.
+따라서 Unity는 입력과 화면 표시를 담당하고, C++ 서버가 로그인 검증과 DB 조회/저장을 담당하도록 분리했습니다.
 
 ```text
-Unity UI / Player Input
-→ Request Packet
-→ NetworkManager
-→ MockServerSimulator 또는 C++ TCP Server
-→ Response Packet
-→ PacketQueue
-→ PacketDispatcher
-→ Scene / UI / Player System
+Unity Client
+→ C++ TCP Server
+→ MariaDB
 ```
 
-<details>
-<summary><b>구조 설계 의도 펼치기/닫기</b></summary>
-
-### 1️⃣ 클라이언트 로직과 서버 응답 분리
-
-- 로그인 성공 여부를 UI가 직접 판단하지 않음
-- 캐릭터 목록은 응답 패킷으로 수신
-- 게임 입장도 `EnterGameRequest / EnterGameResponse` 흐름으로 처리
-- 나중에 Mock 계층을 실제 TCP 서버로 교체하기 쉽게 구성
-
-### 2️⃣ Unity 메인 스레드 처리 보장
-
-- 서버에서 받은 패킷을 바로 UI나 GameObject에 반영하지 않고 `PacketQueue`에 적재
-- `Update()`에서 일정 개수만 처리해 Unity 메인 스레드에서 안전하게 이벤트 분배
-- `PacketDispatcher` 이벤트를 통해 각 씬 컨트롤러가 필요한 패킷만 구독
-
-### 3️⃣ 서버 확장 대비
-
-- C# 데이터 구조와 C++ 도메인 구조를 비슷하게 유지
-- `IAccountRepository`를 통해 Mock Data와 DB 구현체를 교체할 수 있게 설계
-- 현재 텍스트 명령 기반 서버를 이후 바이너리 패킷 / Protobuf 구조로 확장 예정
-
-</details>
+Unity는 MariaDB에 직접 접속하지 않습니다.
 
 ---
 
-# 🎮 Core Systems (핵심 시스템)
-
-## 🧭 씬 플로우 구조
-
-> 로그인부터 캐릭터 선택, 게임 입장까지의 흐름을  
-> 실제 온라인 게임 진입 구조처럼 씬 단위로 분리했습니다.
+# 🎮 현재 실행 흐름
 
 ```text
 LoginScene
-→ LoadingScene
+→ 로그인 / 회원가입 요청
+→ C++ TCP 서버
+→ MariaDB 계정 조회 또는 생성
 → CharacterSelectScene
-→ LoadingScene
-→ GameScene
+→ 캐릭터 3슬롯 표시
+→ 빈 슬롯에서 직업 선택 후 캐릭터 생성
+→ 서버가 DB에 캐릭터 저장
+→ GameScene 입장
 ```
 
-### 구성
+현재 테스트 계정:
 
-- `LoginScene`  
-  로그인 UI 생성 및 `LoginRequestPacket` 전송
-
-- `LoadingScene`  
-  다음 씬 비동기 로딩 처리
-
-- `CharacterSelectScene`  
-  서버 응답으로 받은 캐릭터 목록 표시 및 입장 요청
-
-- `GameScene`  
-  선택된 캐릭터 데이터 기반 월드 진입
-
-> 씬 이름과 전환 흐름은 `SceneNames`, `SceneFlow`로 분리하여  
-> 화면 로직에서 직접 문자열을 관리하지 않도록 구성했습니다.
-
-🔗 Scene Flow 코드: `Assets/3.Script/Client/Scene/SceneFlow.cs`  
-🔗 Login Controller 코드: `Assets/3.Script/Client/Login/LoginSceneController.cs`  
-🔗 Character Select 코드: `Assets/3.Script/Client/Character/CharacterSelectSceneController.cs`
+```text
+ID: test_user
+PW: 1234
+```
 
 ---
 
-## 🌐 클라이언트 패킷 / 네트워크 구조
+# 🧩 Unity Client 구조
 
-> 실제 TCP 서버 연동을 고려해  
-> 송신 진입점, 수신 큐, 패킷 분배 구조를 분리했습니다.
+## 네트워크 진입점
 
-### 구현 방식
-
-- `NetworkManager`를 전역 네트워크 진입점으로 사용
-- `SendPacket(PacketBase packet)`으로 모든 요청 패킷 송신
-- 현재는 `useLocalSimulation` 값에 따라 Mock 서버로 전달
-- 수신 패킷은 `PacketQueue`에 적재
-- `PacketDispatcher`가 `PacketId`에 따라 이벤트 분배
-- 프레임당 처리 개수를 제한해 패킷 폭주 상황 대비
+- `NetworkManager`가 TCP 서버 연결을 관리
+- `SendPacket(PacketBase packet)`으로 로그인/회원가입/캐릭터 요청 전송
+- 서버 텍스트 응답은 `ServerTextProtocol`에서 Unity 패킷으로 변환
+- 수신 패킷은 `PacketQueue`에 쌓고 `Update()`에서 처리
+- `PacketDispatcher`가 패킷 ID별 이벤트를 UI/게임 시스템에 전달
 
 ```text
 PacketBase
-→ PacketId
-→ NetworkManager.SendPacket()
+→ NetworkManager
+→ TcpServerConnection
+→ ServerTextProtocol
 → PacketQueue
 → PacketDispatcher
 → Login / Character / Game System
 ```
 
-> 현재 `NetworkManager` 내부에는 실제 TCP Socket 송신을 넣을 TODO 지점이 있으며,  
-> 이 부분만 교체하면 기존 UI와 씬 흐름은 그대로 유지할 수 있도록 설계했습니다.
+주요 코드:
 
-🔗 NetworkManager 코드: `Assets/3.Script/Server/Network/NetworkManager.cs`  
-🔗 PacketQueue 코드: `Assets/3.Script/Server/Network/PacketQueue.cs`  
-🔗 PacketDispatcher 코드: `Assets/3.Script/Server/Network/PacketDispatcher.cs`  
-🔗 PacketId 코드: `Assets/3.Script/Server/Packet/PacketId.cs`
+- `Assets/3.Script/Server/Network/NetworkManager.cs`
+- `Assets/3.Script/Server/Network/TcpServerConnection.cs`
+- `Assets/3.Script/Server/Network/ServerTextProtocol.cs`
+- `Assets/3.Script/Server/Network/PacketDispatcher.cs`
 
 ---
 
-## 🖥 C++ TCP 서버 프로토타입
+# 🖥 C++ TCP Server 구조
 
-> Unity 클라이언트와 실제 TCP Socket으로 연결할 수 있는  
-> C++ 서버 프로토타입을 `Server_CPP` 폴더에 별도로 구성했습니다.
-
-현재 서버는 Windows Winsock 기반이며, 학습과 구조 검증을 위해  
-Blocking TCP + ClientSession별 Thread 방식으로 구현했습니다.
-
-### 현재 처리 명령
+서버는 Winsock 기반 Blocking TCP + ClientSession별 Thread 방식으로 구현했습니다.
 
 ```text
-LOGIN test_user mock-token
-ENTER_GAME 101
+Server_CPP
+├─ src
+│  ├─ main.cpp
+│  ├─ net
+│  │  ├─ TcpServer
+│  │  └─ ClientSession
+│  ├─ protocol
+│  │  └─ PacketCodec
+│  ├─ service
+│  │  └─ AuthService
+│  ├─ repository
+│  │  ├─ IAccountRepository
+│  │  └─ MariaDbAccountRepository
+│  └─ domain
+│     ├─ AccountData
+│     └─ CharacterData
+└─ db
+   └─ schema.sql
+```
+
+지원 명령:
+
+```text
+REGISTER id password
+LOGIN id password
+CREATE_CHARACTER accountId slotIndex Warrior|Archer|Rogue
+ENTER_GAME characterId
 PING
 QUIT
 ```
 
-### 서버 응답 예시
+응답 예시:
 
 ```text
-WELCOME ProjectMORPGServer
-LOGIN_OK accountId=1 message=MockLoginSuccess
-CHARACTER_LIST count=3
-CHARACTER id=101 name=Leon class=Warrior level=1 gold=100 pos=-2,1,0 skills=1001,1002,1003
-CHARACTER id=102 name=Rena class=Archer level=1 gold=100 pos=0,1,0 skills=2001,2002,2003
-CHARACTER id=103 name=Kain class=Rogue level=1 gold=100 pos=2,1,0 skills=3001,3002,3003
+LOGIN_OK accountId=1 message=LoginSuccess
+CHARACTER_LIST count=0
 CHARACTER_LIST_END
 ```
 
-### 서버 구조
+---
+
+# 🗄 MariaDB 연동 구조
+
+`MariaDbAccountRepository`가 실제 DB 조회/저장을 담당합니다.
+
+- 로그인: `accounts` 테이블 조회
+- 회원가입: 중복 아이디 검사 후 `accounts` INSERT
+- 캐릭터 생성: 계정당 최대 3개, `characters` INSERT
+- 기본 스킬: `character_skills` INSERT
+- 캐릭터 입장: `characters` + `character_skills` 조회
+
+DB 스키마:
 
 ```text
-Server_CPP
-├─ CMakeLists.txt
-├─ ProjectMORPGServer.vcxproj
-└─ src
-   ├─ main.cpp
-   ├─ net
-   │  ├─ TcpServer
-   │  └─ ClientSession
-   ├─ protocol
-   │  └─ PacketCodec
-   ├─ service
-   │  └─ AuthService
-   ├─ repository
-   │  ├─ IAccountRepository
-   │  └─ MockAccountRepository
-   └─ domain
-      ├─ AccountData
-      └─ CharacterData
+Server_CPP/db/schema.sql
 ```
 
-### 빌드 방법
+---
+
+# ⚠️ 서버 연결 실패 처리
+
+서버가 켜져 있지 않거나 실행 중 연결이 끊기면 Unity에서 팝업을 표시합니다.
+
+```text
+서버가 끊겼습니다.
+확인을 누르면 게임을 종료합니다.
+```
+
+확인 버튼을 누르면:
+
+- 에디터에서는 Play Mode 종료
+- 빌드에서는 `Application.Quit()` 실행
+
+---
+
+# 🧭 개발 일지
+
+## 1일차 - Unity 클라이언트 기본 흐름 구성
+
+### 구현 범위
+
+- 로그인 씬, 로딩 씬, 캐릭터 선택 씬, 게임 씬 흐름 구성
+- `SceneFlow` 기반 씬 전환 구조 작성
+- 런타임 uGUI 기반 로그인 UI 생성
+- `PacketBase`, `PacketId`, 로그인/입장 패킷 구조 작성
+- `PacketQueue`, `PacketDispatcher`로 수신 패킷 처리 구조 분리
+
+### 생긴 문제
+
+초기에는 UI에서 로그인 성공 여부를 직접 처리하는 방식으로 흐름을 만들 수 있었지만, 나중에 서버가 붙으면 UI 코드와 네트워크 코드가 강하게 엮일 가능성이 있었습니다.
+
+### 선택한 방식
+
+UI는 요청 패킷만 만들고, 결과는 `PacketDispatcher` 이벤트를 통해 받도록 분리했습니다.
+
+### 해결 결과
+
+로그인 화면, 캐릭터 선택 화면, 게임 입장 흐름이 서버 응답 구조를 기준으로 동작하도록 정리되었습니다.
+
+---
+
+## 2일차 - C++ TCP 서버 프로토타입 구성
+
+### 구현 범위
+
+- `Server_CPP` 폴더에 C++ 서버 프로젝트 구성
+- Winsock 기반 TCP Listen/Accept 구현
+- 클라이언트 접속마다 `ClientSession`을 생성하는 구조 작성
+- 텍스트 명령 기반 프로토콜 작성
+- `LOGIN`, `ENTER_GAME`, `PING`, `QUIT` 처리
+
+### 생긴 문제
+
+처음부터 바이너리 패킷이나 IOCP 구조로 들어가면 학습 난이도와 디버깅 난이도가 동시에 올라가는 문제가 있었습니다.
+
+### 선택한 방식
+
+1차 목표를 "Unity와 서버가 실제로 대화하는 것"으로 잡고, 텍스트 명령 기반 Blocking TCP 서버를 먼저 구현했습니다.
+
+### 해결 결과
+
+서버 콘솔에서 요청/응답 흐름을 직접 확인할 수 있게 되었고, 이후 MariaDB 연동과 Unity TCP 연결을 붙일 수 있는 기반이 생겼습니다.
+
+---
+
+## 3일차 - 로그인/회원가입/캐릭터 생성 UI 확장
+
+### 구현 범위
+
+- 로그인 화면에 아이디/비밀번호 입력창 추가
+- 로그인과 회원가입 버튼 분리
+- 회원가입 요청/응답 패킷 추가
+- 캐릭터 선택 화면을 3슬롯 구조로 변경
+- 빈 슬롯에서 전사/궁수/도적 중 하나를 선택해 캐릭터 생성 요청
+
+### 생긴 문제
+
+테스트 아이디 `test_user` 입력 중 언더바가 입력되지 않는 문제가 있었습니다.
+
+### 선택한 방식
+
+Unity `InputField`의 일반 입력창은 `ContentType.Standard`, 비밀번호 입력창만 `ContentType.Password`를 사용하도록 분리했습니다.
+
+### 해결 결과
+
+아이디 입력에서 언더바를 정상적으로 사용할 수 있게 되었고, 로그인/회원가입/캐릭터 생성 UI가 하나의 흐름으로 이어졌습니다.
+
+---
+
+## 4일차 - MariaDB 스키마 설계 및 DB 연결 준비
+
+### 구현 범위
+
+- MariaDB Community Server 설치
+- DBeaver로 DB 시각화 환경 구성
+- `project_morpg` 데이터베이스 생성
+- `accounts`, `characters`, `character_skills`, `inventory_items`, `equipment` 테이블 설계
+- 기본 테스트 계정 `test_user / 1234` 준비
+
+### 생긴 문제
+
+Unity에서 MariaDB로 직접 접속할지, 서버를 거쳐 접속할지 구조 선택이 필요했습니다.
+
+### 선택한 방식
+
+Unity는 DB에 직접 접속하지 않고, C++ 서버만 MariaDB에 접속하는 구조로 결정했습니다.
+
+### 해결 결과
+
+클라이언트는 서버 요청만 담당하고, 계정/캐릭터 저장은 서버가 책임지는 구조로 정리되었습니다.
+
+---
+
+## 5일차 - C++ 서버와 MariaDB 실제 연동
+
+### 구현 범위
+
+- `IAccountRepository` 기반으로 `MariaDbAccountRepository` 추가
+- 로그인 시 `accounts` 테이블 조회
+- 회원가입 시 중복 아이디 확인 후 계정 추가
+- 캐릭터 생성 시 슬롯/직업 검증 후 DB 저장
+- 캐릭터 생성 시 기본 스킬을 `character_skills`에 저장
+- C++ 서버 빌드 설정에 MariaDB include/lib/DLL 연결
+
+### 생긴 문제
+
+DB 접속 비밀번호와 게임 로그인 비밀번호를 혼동할 수 있었습니다. 또한 MariaDB DLL이 실행 파일 위치에 없으면 서버 실행이 실패할 수 있었습니다.
+
+### 선택한 방식
+
+DB root 비밀번호는 코드에 저장하지 않고 서버 실행 인자나 환경 변수로 받도록 했습니다. 빌드 후 `libmariadb.dll`은 실행 폴더로 복사되도록 설정했습니다.
+
+### 해결 결과
+
+`test_user / 1234` 로그인 요청이 실제 TCP 서버와 MariaDB를 거쳐 성공하는 것을 확인했습니다.
+
+검증 응답:
+
+```text
+WELCOME ProjectMORPGServer
+LOGIN_OK accountId=1 message=LoginSuccess
+CHARACTER_LIST count=0
+CHARACTER_LIST_END
+BYE
+```
+
+---
+
+## 6일차 - Mock 제거 및 서버 연결 실패 처리
+
+### 구현 범위
+
+- Unity `MockServerSimulator` 제거
+- C++ `MockAccountRepository` 제거
+- `NetworkManager`를 실제 TCP 서버 전용 구조로 정리
+- 서버가 켜져 있지 않거나 연결이 끊기면 팝업 표시
+- 확인 버튼을 누르면 게임 종료 처리
+- README를 현재 실제 구조 기준으로 정리
+
+### 생긴 문제
+
+서버가 꺼져 있을 때 Unity에서 아무 반응 없이 로그인 요청만 실패하면 사용자가 원인을 알기 어렵습니다.
+
+### 선택한 방식
+
+연결 실패나 수신 스레드 종료를 `NetworkManager`가 감지하고, Unity 메인 스레드에서 종료 팝업을 띄우도록 했습니다.
+
+### 해결 결과
+
+서버 미실행 상태에서 요청하면 `서버가 끊겼습니다.` 팝업이 뜨고, 확인을 누르면 게임이 종료됩니다.
+
+---
+
+# 🧪 문제 해결 기록
+
+## 문제 1. Unity에서 DB에 직접 접속할지 고민
+
+- 문제: Unity Android 빌드에서 MySQL/MariaDB Connector를 직접 넣는 방법도 있었지만 보안상 좋지 않음
+- 선택: Unity → C++ 서버 → MariaDB 구조 선택
+- 해결: Unity는 TCP 요청만 보내고 DB 계정 정보는 서버에만 존재하도록 분리
+
+## 문제 2. 로그인 아이디에 언더바 입력 불가
+
+- 문제: `test_user` 입력 시 `_`가 입력되지 않음
+- 원인: `InputField`의 입력 타입 설정이 일반 아이디 입력에 맞지 않음
+- 해결: 아이디 입력은 `ContentType.Standard`, 비밀번호는 `ContentType.Password`로 분리
+
+## 문제 3. MariaDB 설치 후 무엇을 해야 하는지 불명확
+
+- 문제: DB 서버 설치와 실제 테이블 생성이 다른 단계라 흐름이 헷갈림
+- 선택: `schema.sql`을 별도 파일로 만들고 MariaDB Client 또는 DBeaver에서 확인 가능하게 구성
+- 해결: `accounts`, `characters` 등 실제 서버가 사용할 테이블 생성
+
+## 문제 4. DB root 비밀번호와 게임 계정 비밀번호 혼동
+
+- 문제: `test_user / 1234`는 게임 로그인 계정이고, 서버가 DB에 접속할 때 쓰는 비밀번호는 MariaDB root 비밀번호임
+- 선택: DB 비밀번호는 코드에 하드코딩하지 않고 실행 인자로 전달
+- 해결: 서버 실행 시 `ProjectMORPGServer.exe 7777 DB_ROOT_PASSWORD` 형태로 분리
+
+## 문제 5. 서버가 꺼져 있을 때 사용자 피드백 없음
+
+- 문제: 서버 미실행 상태에서 로그인하면 사용자가 왜 안 되는지 알기 어려움
+- 선택: 연결 실패를 UI 팝업으로 명확히 표시
+- 해결: `서버가 끊겼습니다.` 팝업과 확인 시 종료 처리 추가
+
+---
+
+# 🚀 실행 방법
+
+## 1. MariaDB 실행
+
+MariaDB 서비스가 실행 중이어야 합니다.
+
+DB 확인:
+
+```sql
+USE project_morpg;
+SELECT account_id, login_id, password_hash FROM accounts;
+```
+
+## 2. C++ 서버 실행
 
 ```powershell
-cd Server_CPP
-cmake -S . -B build
-cmake --build build --config Debug
-.\build\Debug\ProjectMORPGServer.exe
+cd C:\Users\user\Documents\GitHub\Project_MORPG\Server_CPP\x64\Debug
+.\ProjectMORPGServer.exe 7777 DB_ROOT_PASSWORD
 ```
 
-기본 포트는 `7777`이며 실행 인자로 변경할 수 있습니다.
+`DB_ROOT_PASSWORD`는 게임 로그인 비밀번호가 아니라 MariaDB root 비밀번호입니다.
 
-```powershell
-.\build\Debug\ProjectMORPGServer.exe 7777
-```
-
-🔗 TcpServer 코드: `Server_CPP/src/net/TcpServer.cpp`  
-🔗 ClientSession 코드: `Server_CPP/src/net/ClientSession.cpp`  
-🔗 AuthService 코드: `Server_CPP/src/service/AuthService.cpp`  
-🔗 MockAccountRepository 코드: `Server_CPP/src/repository/MockAccountRepository.cpp`
-
----
-
-## 🧪 Local Server Simulation
-
-> 실제 TCP 연동 전에도 클라이언트의 로그인, 캐릭터 선택, 게임 입장 흐름을  
-> 검증할 수 있도록 Unity 내부에 Mock 서버 계층을 구현했습니다.
-
-### 지원 흐름
+정상 로그:
 
 ```text
-LoginRequest
-→ LoginResponse
-→ CharacterList
-
-EnterGameRequest
-→ EnterGameResponse
+[Server] Listening on port 7777
 ```
 
-### Mock 캐릭터
+## 3. Unity 실행
+
+Unity 로그인 화면에서:
 
 ```text
-Leon / Warrior
-Rena / Archer
-Kain / Rogue
-```
-
-Mock 캐릭터에는 기본 위치, 골드, 장비, 소비 아이템, 직업별 기본 스킬이 포함됩니다.
-
-> 이 구조는 최종 서버를 대체하기 위한 것이 아니라,  
-> UI / 패킷 / 씬 흐름을 먼저 검증하기 위한 임시 서버 계층입니다.
-
-🔗 MockServerSimulator 코드: `Assets/3.Script/Server/Network/MockServerSimulator.cs`
-
----
-
-## 🕹 조이스틱 기반 쿼터뷰 이동
-
-> 모바일 MORPG 조작감을 목표로  
-> 가상 조이스틱 기반 쿼터뷰 이동을 구현했습니다.
-
-### 구현 방식
-
-- `CharacterController` 기반 이동
-- 가상 조이스틱 입력 지원
-- 에디터 테스트용 WASD / 방향키 입력 지원
-- 카메라 방향 기준 이동 벡터 변환
-- 이동 방향 기반 캐릭터 회전
-- 이동 시작 / 이동 중 / 정지 시점 감지
-- 일정 간격으로 `MovePacket` 생성
-- 정지 시 `StopPacket` 생성
-
-> 이동 입력은 클라이언트에서 즉시 반영하되,  
-> 서버 연동 단계에서는 이동 패킷을 통해 검증 및 동기화할 수 있도록 이벤트 구조를 준비했습니다.
-
-🔗 Player Controller 코드: `Assets/3.Script/Client/Player/QuarterViewPlayerController.cs`  
-🔗 VirtualJoystick 코드: `Assets/3.Script/Client/UI/VirtualJoystick.cs`  
-🔗 Camera Controller 코드: `Assets/3.Script/Client/Camera/QuarterViewCameraController.cs`
-
----
-
-## 👤 캐릭터 / 직업 / 스킬 데이터 구조
-
-> 계정, 캐릭터, 장비, 인벤토리, 스킬 데이터를  
-> 서버와 DB 연동을 고려해 분리했습니다.
-
-### 직업 구성
-
-```text
-Warrior / 전사
-Archer / 궁수
-Rogue / 도적
-```
-
-### 직업별 기본 스킬
-
-```text
-전사
-- Slash
-- Shield Bash
-- Whirlwind
-
-궁수
-- Arrow Shot
-- Power Shot
-- Rain of Arrows
-
-도적
-- Stab
-- Dash Attack
-- Backstab
-```
-
-### 데이터 구성
-
-```text
-AccountData
-CharacterData
-EquipmentData
-InventoryItemData
-SkillData
-ClassType
-EquipSlot
-ItemType
-```
-
-> Unity의 Mock 데이터와 C++ 서버의 도메인 데이터를 비슷한 형태로 맞춰  
-> 이후 DB 테이블과 서버 응답 구조로 확장하기 쉽게 구성했습니다.
-
-🔗 CharacterData 코드: `Assets/3.Script/Shared/Data/CharacterData.cs`  
-🔗 SkillDatabase 코드: `Assets/3.Script/Client/Data/SkillDatabase.cs`  
-🔗 C++ CharacterData 코드: `Server_CPP/src/domain/CharacterData.h`
-
----
-
-## 🧩 Runtime uGUI 구조
-
-> 로그인, 캐릭터 선택, 게임 HUD를 런타임 uGUI 생성 방식으로 구성했습니다.
-
-초기 테스트용 `OnGUI` 방식에서 벗어나,  
-`Canvas`, `Panel`, `Text`, `Button`, `Slider`를 코드에서 생성하는 구조로 정리했습니다.
-
-### 구현 UI
-
-- 로그인 화면
-- 로딩 화면
-- 캐릭터 선택 카드 UI
-- 게임 HUD
-- HP / MP 표시
-- 가상 조이스틱
-- 스킬 슬롯 UI
-
-> UI Prefab이 없어도 씬 진입 시 필요한 화면을 생성할 수 있어,  
-> 현재처럼 구조를 빠르게 검증하는 단계에서 씬별 UI 의존성을 줄일 수 있었습니다.
-
-🔗 RuntimeUiFactory 코드: `Assets/3.Script/Client/UI/RuntimeUiFactory.cs`  
-🔗 GameHudController 코드: `Assets/3.Script/Client/UI/GameHudController.cs`
-
----
-
-# 🗂 프로젝트 폴더 구조
-
-```text
-Assets
-├─ 1.Scene
-│  ├─ LoginScene.unity
-│  ├─ LoadingScene.unity
-│  ├─ CharacterSelectScene.unity
-│  └─ GameScene.unity
-├─ 2.Model
-├─ 3.Script
-│  ├─ Client
-│  │  ├─ Camera
-│  │  ├─ Character
-│  │  ├─ Combat
-│  │  ├─ Core
-│  │  ├─ Data
-│  │  ├─ Login
-│  │  ├─ Monster
-│  │  ├─ Player
-│  │  ├─ Scene
-│  │  └─ UI
-│  ├─ Server
-│  │  ├─ Network
-│  │  └─ Packet
-│  └─ Shared
-│     ├─ Data
-│     ├─ Define
-│     └─ Protocol
-├─ 5.Animation
-├─ 6.Materials
-├─ 8.Audio
-└─ 9.Font
-
-Server_CPP
-├─ CMakeLists.txt
-├─ ProjectMORPGServer.vcxproj
-└─ src
-   ├─ domain
-   ├─ net
-   ├─ protocol
-   ├─ repository
-   └─ service
-```
-
----
-
-# 🚀 서버 / DB 확장 계획
-
-## 1. Unity TCP Client 연동
-
-현재 `NetworkManager`의 Mock 송신 경로를 실제 TCP Socket 송수신 구조로 교체할 예정입니다.
-
-```text
-현재
-Unity Client
-→ MockServerSimulator
-
-목표
-Unity Client
-→ C++ TCP Server
-```
-
-## 2. 패킷 직렬화 구조 교체
-
-현재 C++ 서버는 텍스트 명령 기반으로 동작합니다.  
-이후 Unity C# 패킷 구조와 맞춰 바이너리 직렬화 또는 Protobuf 기반 구조로 교체할 예정입니다.
-
-## 3. IOCP 서버 확장
-
-현재 서버는 Blocking TCP + Thread 방식입니다.  
-다음 단계에서는 IOCP 기반 비동기 세션 처리로 확장하여 다중 접속 처리 구조를 개선할 예정입니다.
-
-## 4. MariaDB 연동
-
-`IAccountRepository` 구현체를 `MockAccountRepository`에서 `MariaDbAccountRepository`로 교체하여  
-실제 계정, 캐릭터, 장비, 인벤토리, 스킬 데이터를 DB에서 조회 / 저장하도록 확장할 예정입니다.
-
-```text
-accounts
-characters
-items
-equipment
-character_skills
-```
-
-## 5. 서버 권위 구조 확장
-
-클라이언트는 입력과 요청만 보내고,  
-서버가 이동 검증, 스킬 사용 가능 여부, 데미지 판정, 보상 지급을 담당하는 구조로 확장할 예정입니다.
-
-## 6. 멀티플레이 동기화
-
-원격 플레이어 생성, 이동 보간, 스킬 사용 브로드캐스트 구조를 구현할 예정입니다.
-
-```text
-Player A 이동
-→ C++ Server
-→ 주변 Player B, C에게 이동 패킷 전송
-→ RemotePlayerController에서 보간 이동
+test_user / 1234
 ```
 
 ---
 
 # ✅ 현재 구현 상태
 
-- Unity 6 프로젝트 구조 정리
-- 로그인 / 로딩 / 캐릭터 선택 / 게임 씬 분리
-- Runtime uGUI 기반 UI 생성
-- Local Server Simulation 기반 로그인 / 캐릭터 선택 / 게임 입장 흐름 구현
-- 전사 / 궁수 / 도적 캐릭터 데이터 구성
-- 장비 / 인벤토리 / 스킬 데이터 구조 구성
-- 조이스틱 기반 쿼터뷰 이동 구현
-- Move / Stop / Skill / Damage / Spawn 패킷 구조 정의
-- PacketQueue / PacketDispatcher 기반 패킷 처리 구조 분리
-- C++ TCP 서버 프로토타입 구현
-- C++ 서버 LOGIN / ENTER_GAME / PING / QUIT 명령 처리
-- `IAccountRepository` 기반 Repository 교체 구조 준비
-- IOCP 서버 및 MariaDB 연동을 위한 기반 구조 설계
+- Unity Runtime 로그인 UI
+- 회원가입 요청/응답
+- 캐릭터 3슬롯 선택 UI
+- 직업 3종 캐릭터 생성
+- C++ TCP 서버
+- MariaDB 계정/캐릭터 저장
+- Mock 서버 제거
+- 서버 연결 실패 팝업 및 종료 처리
+
+---
+
+# 🛠 다음 작업
+
+- 비밀번호 평문 저장을 해시 저장 방식으로 변경
+- 캐릭터 삭제 기능 추가
+- 캐릭터 이름 직접 입력 기능 추가
+- 이동/전투 패킷을 서버 판정 구조로 확장
+- Blocking Thread 서버를 IOCP 기반 서버로 확장

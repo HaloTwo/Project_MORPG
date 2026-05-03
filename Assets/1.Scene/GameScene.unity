@@ -656,7 +656,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65c4a5e38bba0044cad8574b0ff783c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkManager
-  useLocalSimulation: 1
   maxPacketsPerFrame: 64
 --- !u!4 &914038644
 Transform:

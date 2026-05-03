@@ -4,11 +4,16 @@ public sealed class NetworkManager : MonoBehaviour
 {
     private static NetworkManager instance;
 
-    [SerializeField] private bool useLocalSimulation = true;
+    [SerializeField] private string serverHost = "127.0.0.1";
+    [SerializeField] private int serverPort = 7777;
     [SerializeField] private int maxPacketsPerFrame = 64;
 
     private readonly PacketQueue receiveQueue = new PacketQueue();
-    private MockServerSimulator mockServer;
+    private ServerTextProtocol textProtocol;
+    private TcpServerConnection tcpConnection;
+    private bool serverDisconnectedPopupRequested;
+    private bool serverDisconnectedPopupVisible;
+    private bool applicationQuitting;
 
     public PacketDispatcher Dispatcher { get; private set; } = new PacketDispatcher();
     public bool IsConnected { get; private set; }
@@ -41,28 +46,44 @@ public sealed class NetworkManager : MonoBehaviour
         }
 
         instance = this;
-        mockServer = new MockServerSimulator();
+        textProtocol = new ServerTextProtocol();
         DontDestroyOnLoad(gameObject);
     }
 
     private void Update()
     {
         ProcessIncomingPackets();
+        ShowServerDisconnectedPopupIfNeeded();
     }
 
-    // 나중에 TCP 서버에 연결할 자리입니다. 지금은 Mock 연결 상태로만 바꿉니다.
     public void Connect(string host = "127.0.0.1", int port = 7777)
     {
-        IsConnected = true;
-        Debug.Log($"[NetworkManager] Mock connect to {host}:{port}");
+        string targetHost = string.IsNullOrWhiteSpace(host) ? serverHost : host;
+        int targetPort = port <= 0 ? serverPort : port;
+        tcpConnection?.Dispose();
+        tcpConnection = new TcpServerConnection(textProtocol, receiveQueue);
+        tcpConnection.Disconnected += HandleTcpDisconnected;
+        IsConnected = tcpConnection.Connect(targetHost, targetPort);
+        Debug.Log($"[NetworkManager] TCP connect to {targetHost}:{targetPort} success={IsConnected}");
+
+        if (!IsConnected)
+        {
+            RequestServerDisconnectedPopup();
+        }
     }
 
-    // 나중에 실제 소켓 연결을 닫을 자리입니다. 지금은 큐를 비우고 연결 상태를 해제합니다.
     public void Disconnect()
     {
         IsConnected = false;
         receiveQueue.Clear();
-        Debug.Log("[NetworkManager] Mock disconnect");
+        if (tcpConnection != null)
+        {
+            tcpConnection.Disconnected -= HandleTcpDisconnected;
+        }
+
+        tcpConnection?.Dispose();
+        tcpConnection = null;
+        Debug.Log("[NetworkManager] Disconnect");
     }
 
     // 패킷을 보내는 입구입니다. 나중에 TcpClient 또는 Socket 송신 코드로 교체하면 됩니다.
@@ -80,19 +101,17 @@ public sealed class NetworkManager : MonoBehaviour
 
         Debug.Log($"[NetworkManager] Send {packet.Id}");
 
-        if (useLocalSimulation)
+        if (!IsConnected || tcpConnection == null)
         {
-            mockServer.HandleClientPacket(packet, receiveQueue);
+            RequestServerDisconnectedPopup();
             return;
         }
 
-        // TODO: 실제 TCP/Socket 송신 코드는 여기로 들어옵니다.
-    }
-
-    // 실제 서버에서 받은 패킷과 같은 흐름으로 테스트 패킷을 넣습니다.
-    public void MockReceivePacket(PacketBase packet)
-    {
-        receiveQueue.Enqueue(packet);
+        if (!tcpConnection.Send(packet))
+        {
+            IsConnected = false;
+            RequestServerDisconnectedPopup();
+        }
     }
 
     // 큐에 쌓인 패킷을 Unity 메인 스레드에서 하나씩 처리합니다.
@@ -104,6 +123,50 @@ public sealed class NetworkManager : MonoBehaviour
             Dispatcher.Dispatch(packet);
             processed++;
         }
+    }
+
+    /// TCP 수신 스레드에서 서버 끊김을 알려오면 메인 스레드 팝업을 예약합니다.
+    private void HandleTcpDisconnected()
+    {
+        IsConnected = false;
+        RequestServerDisconnectedPopup();
+    }
+
+    /// 서버 연결 실패나 끊김을 한 번만 UI로 보여주기 위해 플래그를 세웁니다.
+    private void RequestServerDisconnectedPopup()
+    {
+        if (applicationQuitting)
+        {
+            return;
+        }
+
+        serverDisconnectedPopupRequested = true;
+    }
+
+    /// Unity UI는 메인 스레드에서만 만들 수 있으므로 Update에서 실제 팝업을 생성합니다.
+    private void ShowServerDisconnectedPopupIfNeeded()
+    {
+        if (!serverDisconnectedPopupRequested || serverDisconnectedPopupVisible)
+        {
+            return;
+        }
+
+        serverDisconnectedPopupVisible = true;
+        RuntimeUiFactory.ShowServerDisconnectedDialog(QuitGame);
+    }
+
+    /// 확인 버튼을 누르면 플레이 중인 게임을 종료합니다.
+    private void QuitGame()
+    {
+        applicationQuitting = true;
+        Disconnect();
+        RuntimeUiFactory.QuitGame();
+    }
+
+    private void OnApplicationQuit()
+    {
+        applicationQuitting = true;
+        Disconnect();
     }
 }
 

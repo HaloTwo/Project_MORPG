@@ -42,3 +42,27 @@ inline const char* ToString(ClassType classType)
         return "None";
     }
 }
+
+/// <summary>
+/// Unity 또는 텍스트 프로토콜에서 받은 직업 문자열을 서버 enum으로 변환합니다.
+/// 잘못된 값은 None으로 반환해서 서비스 계층에서 실패 처리할 수 있게 합니다.
+/// </summary>
+inline ClassType ClassTypeFromString(const std::string& value)
+{
+    if (value == "Warrior")
+    {
+        return ClassType::Warrior;
+    }
+
+    if (value == "Archer")
+    {
+        return ClassType::Archer;
+    }
+
+    if (value == "Rogue")
+    {
+        return ClassType::Rogue;
+    }
+
+    return ClassType::None;
+}
