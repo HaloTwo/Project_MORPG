@@ -64,6 +64,24 @@ sysinfo.txt
 *.unitypackage.meta
 *.app
 
+# C++ server local build artifacts
+/Server_CPP/.vs/
+/Server_CPP/build/
+/Server_CPP/x64/
+/Server_CPP/Debug/
+/Server_CPP/Release/
+/Server_CPP/ProjectM.*/
+/Server_CPP/*.vcxproj.user
+/Server_CPP/**/*.obj
+/Server_CPP/**/*.ilk
+/Server_CPP/**/*.pdb
+/Server_CPP/**/*.idb
+/Server_CPP/**/*.tlog
+/Server_CPP/**/*.lastbuildstate
+/Server_CPP/**/*.recipe
+/Server_CPP/**/*.exe
+/Server_CPP/**/*.dll
+
 # Crashlytics generated file
 crashlytics-build.properties
 
