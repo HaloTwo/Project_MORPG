@@ -12,7 +12,7 @@
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
 - 현재 진행 상황: 개발 3일차
-- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub
+- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex
 - 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Character Persistence, Inventory/Combat Expansion
 
 ---
@@ -177,67 +177,6 @@ Unity는 요청만 보내고, 서버가 계정 중복 검사와 캐릭터 슬롯
 
 ---
 
-## 🧠 주요 설계 선택
-
-<details>
-<summary><b>1. Repository Pattern을 사용한 이유</b></summary>
-
-서버 로직에서 DB 코드를 직접 호출하면 로그인, 회원가입, 캐릭터 생성 로직이 MariaDB 구현에 강하게 묶입니다.
-
-그래서 `IAccountRepository`를 두고, 서비스 계층은 저장 방식이 Mock인지 MariaDB인지 몰라도 동작하도록 분리했습니다.
-
-현재는 Mock 구현을 제거하고 MariaDB 구현체만 사용하지만, 이 구조 덕분에 서버 로직을 크게 바꾸지 않고 실제 DB 저장소로 전환할 수 있었습니다.
-
-</details>
-
-<details>
-<summary><b>2. 텍스트 프로토콜을 먼저 선택한 이유</b></summary>
-
-초기 네트워크 단계에서는 패킷 직렬화보다 요청/응답 흐름 검증이 더 중요했습니다.
-
-따라서 아래처럼 사람이 읽을 수 있는 텍스트 명령으로 먼저 구성했습니다.
-
-```text
-LOGIN test_user 1234
-CREATE_CHARACTER 1 0 Warrior
-```
-
-이 방식은 디버깅이 쉽고, 서버 콘솔과 소켓 테스트만으로 문제 위치를 빠르게 확인할 수 있습니다.  
-이후 구조가 안정되면 바이너리 패킷이나 Protobuf로 교체할 예정입니다.
-
-</details>
-
-<details>
-<summary><b>3. 서버 연결 실패를 종료 팝업으로 처리한 이유</b></summary>
-
-현재 구조에서 로그인/캐릭터 생성은 서버가 없으면 진행할 수 없습니다.
-
-따라서 서버가 꺼진 상태에서 클라이언트를 계속 유지하는 것보다, 명확한 메시지를 보여주고 종료하는 편이 현재 개발 단계에 맞다고 판단했습니다.
-
-```text
-서버가 끊겼습니다.
-확인을 누르면 게임을 종료합니다.
-```
-
-이 처리는 추후 재접속 시스템이 생기기 전까지의 임시 안정 장치입니다.
-
-</details>
-
-<details>
-<summary><b>4. 계정당 캐릭터 3슬롯을 서버에서 제한한 이유</b></summary>
-
-클라이언트 UI에서 3칸만 보여줘도, 요청 조작으로 4번째 캐릭터 생성을 보낼 수 있습니다.
-
-그래서 캐릭터 수 제한은 UI가 아니라 서버와 DB 제약에서 함께 막도록 구성했습니다.
-
-- 서버: 캐릭터 생성 전 계정 캐릭터 수 확인
-- DB: `(account_id, slot_index)` UNIQUE 적용
-- DB: `slot_index BETWEEN 0 AND 2` CHECK 적용
-
-</details>
-
----
-
 ## ✅ 현재 상태
 
 ```text
@@ -276,33 +215,4 @@ CHARACTER_LIST_END
 - 비밀번호 해시 저장 구조 적용
 - Blocking TCP 서버를 IOCP 기반으로 개선
 
----
 
-## 실행 정보
-
-<details>
-<summary><b>실행 방법 펼치기</b></summary>
-
-### 1. MariaDB 실행 확인
-
-```sql
-USE project_morpg;
-SELECT account_id, login_id, password_hash FROM accounts;
-```
-
-### 2. C++ 서버 실행
-
-```powershell
-cd C:\Users\user\Documents\GitHub\Project_MORPG\Server_CPP\x64\Debug
-.\ProjectMORPGServer.exe 7777 DB_ROOT_PASSWORD
-```
-
-`DB_ROOT_PASSWORD`는 게임 로그인 비밀번호가 아니라 MariaDB root 비밀번호입니다.
-
-### 3. Unity 로그인
-
-```text
-test_user / 1234
-```
-
-</details>
