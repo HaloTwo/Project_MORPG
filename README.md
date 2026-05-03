@@ -188,16 +188,6 @@ Unity 로그인 UI
 → DB 저장
 ```
 
-실제 서버 테스트 응답:
-
-```text
-WELCOME ProjectMORPGServer
-LOGIN_OK accountId=1 message=LoginSuccess
-CHARACTER_LIST count=0
-CHARACTER_LIST_END
-```
-
----
 
 ## 🛠 다음 개발 예정
 
