@@ -3,14 +3,14 @@
 ## C++ TCP Server 기반 Unity 3D Quarter-View MORPG
 
 > Unity 클라이언트가 모든 데이터를 직접 판단하는 구조가 아니라,  
-> **C++ TCP 서버가 로그인, 회원가입, 캐릭터 생성, 캐릭터 입장 흐름을 검증하고    
-> MariaDB에 저장하는 구조**로 설계한 MORPG 프로젝트입니다.
+> **C++ TCP 서버가 로그인, 회원가입, 캐릭터 생성, 캐릭터 입장 흐름을 검증하고,  
+> MariaDB에 계정/캐릭터 데이터를 저장하는 구조**로 설계한 MORPG 프로젝트입니다.
 
 - 개발 인원: 1인
-- 개발 기간: 2026.05 ~ 진행 중
-- 현재 개발 기간: 3일차
-- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex
-- 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB
+- 개발 기간: 2026.05.01 ~ 진행 중
+- 현재 진행 상황: 개발 3일차
+- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub
+- 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Character Persistence
 
 ---
 
