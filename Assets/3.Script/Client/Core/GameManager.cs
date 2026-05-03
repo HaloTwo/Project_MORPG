@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public sealed class GameManager : MonoBehaviour
 {
@@ -9,6 +11,7 @@ public sealed class GameManager : MonoBehaviour
 
     private readonly Dictionary<int, RemotePlayerController> remotePlayers = new Dictionary<int, RemotePlayerController>();
     private QuarterViewPlayerController localPlayer;
+    private PacketDispatcher subscribedDispatcher;
 
     public QuarterViewPlayerController LocalPlayer => localPlayer;
     public IReadOnlyDictionary<int, RemotePlayerController> RemotePlayers => remotePlayers;
@@ -23,26 +26,17 @@ public sealed class GameManager : MonoBehaviour
 
     private void OnEnable()
     {
-        PacketDispatcher dispatcher = NetworkManager.Instance.Dispatcher;
-        dispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
-        dispatcher.SpawnReceived += HandleSpawn;
-        dispatcher.MoveReceived += HandleMove;
-        dispatcher.StopReceived += HandleStop;
+        SubscribeDispatcher();
     }
 
     private void OnDisable()
     {
-        NetworkManager networkManager = FindFirstObjectByType<NetworkManager>();
-        if (networkManager == null)
-        {
-            return;
-        }
+        UnsubscribeDispatcher();
+    }
 
-        PacketDispatcher dispatcher = networkManager.Dispatcher;
-        dispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
-        dispatcher.SpawnReceived -= HandleSpawn;
-        dispatcher.MoveReceived -= HandleMove;
-        dispatcher.StopReceived -= HandleStop;
+    private void OnDestroy()
+    {
+        UnsubscribeDispatcher();
     }
 
     private void Start()
@@ -50,6 +44,7 @@ public sealed class GameManager : MonoBehaviour
         PrepareLocalPlayer();
         NetworkManager.Instance.Connect();
         ApplySelectedCharacterIfExists();
+        BuildReturnButton();
     }
 
     // 씬에 이미 놓인 플레이어를 먼저 찾고, 없으면 프리팹으로 생성합니다.
@@ -60,6 +55,11 @@ public sealed class GameManager : MonoBehaviour
         if (localPlayer == null && localPlayerPrefab != null)
         {
             localPlayer = Instantiate(localPlayerPrefab, Vector3.zero, Quaternion.identity, playerRoot);
+        }
+
+        if (localPlayer == null)
+        {
+            localPlayer = CreateFallbackLocalPlayer();
         }
 
         AttachCameraToLocalPlayer();
@@ -101,6 +101,12 @@ public sealed class GameManager : MonoBehaviour
         }
 
         PrepareLocalPlayer();
+        if (localPlayer == null)
+        {
+            Debug.LogError("[GameManager] LocalPlayer를 찾거나 생성하지 못했습니다.");
+            return;
+        }
+
         localPlayer.InitializeFromCharacter(character);
 
         SkillController skillController = localPlayer.GetComponent<SkillController>();
@@ -116,6 +122,11 @@ public sealed class GameManager : MonoBehaviour
     // 캐릭터 입장 성공 시 로컬 플레이어에 ID, 직업, 위치, 스킬을 적용합니다.
     private void HandleEnterGameResponse(EnterGameResponsePacket packet)
     {
+        if (this == null || !isActiveAndEnabled)
+        {
+            return;
+        }
+
         if (!packet.Success || packet.Character == null)
         {
             Debug.LogWarning($"[GameManager] EnterGame failed: {packet.Message}");
@@ -218,6 +229,71 @@ public sealed class GameManager : MonoBehaviour
         {
             remotePlayer.SetTargetPosition(packet.Position, packet.Yaw);
         }
+    }
+
+    /// 게임 씬에서도 현재 계정을 유지한 채 캐릭터 선택 화면으로 돌아갈 수 있게 합니다.
+    private void BuildReturnButton()
+    {
+        Canvas canvas = RuntimeUiFactory.CreateCanvas("GameMenuCanvas");
+        Button returnButton = RuntimeUiFactory.CreateButton(canvas.transform, "ReturnCharacterSelectButton", "캐릭터 선택", new Vector2(0.84f, 0.90f), new Vector2(0.98f, 0.97f), Vector2.zero, Vector2.zero);
+        returnButton.onClick.AddListener(ReturnToCharacterSelect);
+    }
+
+    /// 선택 캐릭터만 비우고 로그인 계정/캐릭터 목록은 유지한 채 선택 씬으로 이동합니다.
+    private void ReturnToCharacterSelect()
+    {
+        CharacterSession.Instance.SetSelectedCharacter(null);
+        SceneFlow.SetNextScene(SceneNames.CharacterSelect);
+        SceneManager.LoadScene(SceneNames.Loading);
+    }
+
+    /// 씬에 플레이어가 없고 프리팹도 비어 있을 때 테스트 가능한 기본 로컬 플레이어를 생성합니다.
+    private QuarterViewPlayerController CreateFallbackLocalPlayer()
+    {
+        GameObject playerObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        playerObject.name = "RuntimeLocalPlayer";
+        playerObject.transform.SetParent(playerRoot, false);
+        playerObject.transform.position = Vector3.zero;
+
+        CapsuleCollider collider = playerObject.GetComponent<CapsuleCollider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        playerObject.AddComponent<CharacterController>();
+        playerObject.AddComponent<SkillController>();
+        return playerObject.AddComponent<QuarterViewPlayerController>();
+    }
+
+    /// NetworkManager가 씬보다 오래 살아있으므로 같은 Dispatcher 참조로 이벤트를 정리합니다.
+    private void SubscribeDispatcher()
+    {
+        if (subscribedDispatcher != null)
+        {
+            return;
+        }
+
+        subscribedDispatcher = NetworkManager.Instance.Dispatcher;
+        subscribedDispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
+        subscribedDispatcher.SpawnReceived += HandleSpawn;
+        subscribedDispatcher.MoveReceived += HandleMove;
+        subscribedDispatcher.StopReceived += HandleStop;
+    }
+
+    /// 씬 전환 후 파괴된 GameManager가 늦은 서버 응답을 받지 않도록 구독을 해제합니다.
+    private void UnsubscribeDispatcher()
+    {
+        if (subscribedDispatcher == null)
+        {
+            return;
+        }
+
+        subscribedDispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
+        subscribedDispatcher.SpawnReceived -= HandleSpawn;
+        subscribedDispatcher.MoveReceived -= HandleMove;
+        subscribedDispatcher.StopReceived -= HandleStop;
+        subscribedDispatcher = null;
     }
 }
 

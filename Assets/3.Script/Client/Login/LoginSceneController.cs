@@ -4,32 +4,30 @@ using UnityEngine.UI;
 
 public sealed class LoginSceneController : MonoBehaviour
 {
+    private Canvas canvas;
     private InputField loginIdInput;
     private InputField passwordInput;
+    private InputField registerIdInput;
+    private InputField registerPasswordInput;
     private Text statusText;
+    private GameObject registerDialog;
     private bool receivedLogin;
     private bool receivedCharacters;
+    private PacketDispatcher subscribedDispatcher;
 
     private void OnEnable()
     {
-        PacketDispatcher dispatcher = NetworkManager.Instance.Dispatcher;
-        dispatcher.LoginResponseReceived += HandleLoginResponse;
-        dispatcher.RegisterResponseReceived += HandleRegisterResponse;
-        dispatcher.CharacterListReceived += HandleCharacterList;
+        SubscribeDispatcher();
     }
 
     private void OnDisable()
     {
-        NetworkManager networkManager = FindFirstObjectByType<NetworkManager>();
-        if (networkManager == null)
-        {
-            return;
-        }
+        UnsubscribeDispatcher();
+    }
 
-        PacketDispatcher dispatcher = networkManager.Dispatcher;
-        dispatcher.LoginResponseReceived -= HandleLoginResponse;
-        dispatcher.RegisterResponseReceived -= HandleRegisterResponse;
-        dispatcher.CharacterListReceived -= HandleCharacterList;
+    private void OnDestroy()
+    {
+        UnsubscribeDispatcher();
     }
 
     private void Start()
@@ -44,7 +42,7 @@ public sealed class LoginSceneController : MonoBehaviour
     /// </summary>
     private void BuildUi()
     {
-        Canvas canvas = RuntimeUiFactory.CreateCanvas("LoginCanvas");
+        canvas = RuntimeUiFactory.CreateCanvas("LoginCanvas");
         RuntimeUiFactory.CreatePanel(canvas.transform, "Background", new Color(0.04f, 0.07f, 0.09f, 1.0f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
         RectTransform panel = RuntimeUiFactory.CreatePanel(canvas.transform, "LoginPanel", new Color(0.08f, 0.12f, 0.16f, 0.94f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-420.0f, -290.0f), new Vector2(420.0f, 290.0f));
@@ -59,7 +57,7 @@ public sealed class LoginSceneController : MonoBehaviour
         loginButton.onClick.AddListener(RequestLogin);
 
         Button registerButton = RuntimeUiFactory.CreateButton(panel, "RegisterButton", "회원가입", new Vector2(0.52f, 0.10f), new Vector2(0.88f, 0.21f), Vector2.zero, Vector2.zero);
-        registerButton.onClick.AddListener(RequestRegister);
+        registerButton.onClick.AddListener(ShowRegisterDialog);
     }
 
     /// <summary>
@@ -77,7 +75,7 @@ public sealed class LoginSceneController : MonoBehaviour
 
         receivedLogin = false;
         receivedCharacters = false;
-        statusText.text = "로그인 요청 중...";
+        SetStatus("로그인 요청 중...");
         NetworkManager.Instance.SendPacket(new LoginRequestPacket(loginId, password));
     }
 
@@ -87,8 +85,8 @@ public sealed class LoginSceneController : MonoBehaviour
     /// </summary>
     private void RequestRegister()
     {
-        string loginId = GetLoginId();
-        string password = GetPassword();
+        string loginId = registerIdInput == null ? string.Empty : registerIdInput.text.Trim();
+        string password = registerPasswordInput == null ? string.Empty : registerPasswordInput.text;
         if (!ValidateCredentialInput(loginId, password))
         {
             return;
@@ -96,7 +94,7 @@ public sealed class LoginSceneController : MonoBehaviour
 
         receivedLogin = false;
         receivedCharacters = false;
-        statusText.text = "회원가입 요청 중...";
+        SetStatus("회원가입 요청 중...");
         NetworkManager.Instance.SendPacket(new RegisterRequestPacket(loginId, password));
     }
 
@@ -106,15 +104,20 @@ public sealed class LoginSceneController : MonoBehaviour
     /// </summary>
     private void HandleLoginResponse(LoginResponsePacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         if (!packet.Success)
         {
-            statusText.text = $"로그인 실패: {packet.Message}";
+            SetStatus(GetFriendlyMessage(packet.Message, "아이디 또는 비밀번호가 틀렸습니다."));
             return;
         }
 
         CharacterSession.Instance.SetAccount(packet.AccountId);
         receivedLogin = true;
-        statusText.text = "로그인 성공. 캐릭터 목록을 받는 중...";
+        SetStatus("로그인 성공. 캐릭터 목록을 받는 중...");
         TryGoCharacterSelect();
     }
 
@@ -124,15 +127,21 @@ public sealed class LoginSceneController : MonoBehaviour
     /// </summary>
     private void HandleRegisterResponse(RegisterResponsePacket packet)
     {
-        if (!packet.Success)
+        if (!IsUiAlive())
         {
-            statusText.text = $"회원가입 실패: {packet.Message}";
             return;
         }
 
+        if (!packet.Success)
+        {
+            SetStatus(GetFriendlyMessage(packet.Message, "이미 존재하는 아이디이거나 사용할 수 없는 계정입니다."));
+            return;
+        }
+
+        HideRegisterDialog();
         CharacterSession.Instance.SetAccount(packet.AccountId);
         receivedLogin = true;
-        statusText.text = "회원가입 성공. 캐릭터 슬롯을 준비하는 중...";
+        SetStatus("회원가입 성공. 캐릭터 슬롯을 준비하는 중...");
         TryGoCharacterSelect();
     }
 
@@ -142,6 +151,11 @@ public sealed class LoginSceneController : MonoBehaviour
     /// </summary>
     private void HandleCharacterList(CharacterListPacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         CharacterSession.Instance.SetCharacters(packet.Characters);
         receivedCharacters = true;
         TryGoCharacterSelect();
@@ -185,10 +199,109 @@ public sealed class LoginSceneController : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(loginId) || string.IsNullOrWhiteSpace(password))
         {
-            statusText.text = "아이디와 비밀번호를 모두 입력하세요.";
+            SetStatus("아이디와 비밀번호를 모두 입력하세요.");
             return false;
         }
 
         return true;
+    }
+
+    /// 회원가입은 로그인 입력창을 재사용하지 않고 별도 팝업에서 계정 생성을 요청합니다.
+    private void ShowRegisterDialog()
+    {
+        if (registerDialog != null)
+        {
+            return;
+        }
+
+        RectTransform dimmed = RuntimeUiFactory.CreatePanel(canvas.transform, "RegisterDialog", new Color(0.0f, 0.0f, 0.0f, 0.68f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        registerDialog = dimmed.gameObject;
+
+        RectTransform panel = RuntimeUiFactory.CreatePanel(dimmed, "RegisterPanel", new Color(0.08f, 0.12f, 0.16f, 0.98f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-360.0f, -260.0f), new Vector2(360.0f, 260.0f));
+        RuntimeUiFactory.CreateText(panel, "Title", "회원가입", 38, TextAnchor.MiddleCenter, Color.white, new Vector2(0.0f, 0.78f), new Vector2(1.0f, 0.94f), Vector2.zero, Vector2.zero);
+        RuntimeUiFactory.CreateText(panel, "Info", "새 계정에 사용할 아이디와 비밀번호를 입력하세요.", 20, TextAnchor.MiddleCenter, new Color(0.75f, 0.85f, 0.92f, 1.0f), new Vector2(0.08f, 0.66f), new Vector2(0.92f, 0.76f), Vector2.zero, Vector2.zero);
+
+        registerIdInput = RuntimeUiFactory.CreateInputField(panel, "RegisterIdInput", "아이디", false, new Vector2(0.12f, 0.50f), new Vector2(0.88f, 0.61f), Vector2.zero, Vector2.zero);
+        registerPasswordInput = RuntimeUiFactory.CreateInputField(panel, "RegisterPasswordInput", "비밀번호", true, new Vector2(0.12f, 0.35f), new Vector2(0.88f, 0.46f), Vector2.zero, Vector2.zero);
+
+        Button createButton = RuntimeUiFactory.CreateButton(panel, "CreateAccountButton", "생성", new Vector2(0.12f, 0.13f), new Vector2(0.48f, 0.25f), Vector2.zero, Vector2.zero);
+        createButton.onClick.AddListener(RequestRegister);
+
+        Button cancelButton = RuntimeUiFactory.CreateButton(panel, "CancelButton", "취소", new Vector2(0.52f, 0.13f), new Vector2(0.88f, 0.25f), Vector2.zero, Vector2.zero);
+        cancelButton.onClick.AddListener(HideRegisterDialog);
+    }
+
+    /// 회원가입 팝업을 닫고 임시 입력 참조를 정리합니다.
+    private void HideRegisterDialog()
+    {
+        if (registerDialog != null)
+        {
+            Destroy(registerDialog);
+        }
+
+        registerDialog = null;
+        registerIdInput = null;
+        registerPasswordInput = null;
+    }
+
+    /// 서버 내부 메시지를 일반 사용자가 이해할 수 있는 문장으로 바꿔 UI에 표시합니다.
+    private string GetFriendlyMessage(string serverMessage, string fallback)
+    {
+        switch (serverMessage)
+        {
+            case "InvalidAccount":
+                return "아이디 또는 비밀번호가 틀렸습니다.";
+            case "DuplicatedOrInvalidAccount":
+                return "이미 존재하는 아이디이거나 사용할 수 없는 계정입니다.";
+            case "LoginFailed":
+                return "로그인에 실패했습니다.";
+            case "RegisterFailed":
+                return "회원가입에 실패했습니다.";
+            default:
+                return fallback;
+        }
+    }
+
+    /// NetworkManager가 씬보다 오래 살아있으므로 같은 Dispatcher 참조로 이벤트를 정리합니다.
+    private void SubscribeDispatcher()
+    {
+        if (subscribedDispatcher != null)
+        {
+            return;
+        }
+
+        subscribedDispatcher = NetworkManager.Instance.Dispatcher;
+        subscribedDispatcher.LoginResponseReceived += HandleLoginResponse;
+        subscribedDispatcher.RegisterResponseReceived += HandleRegisterResponse;
+        subscribedDispatcher.CharacterListReceived += HandleCharacterList;
+    }
+
+    /// 씬 전환 후 파괴된 로그인 UI가 늦은 서버 응답을 받지 않도록 구독을 해제합니다.
+    private void UnsubscribeDispatcher()
+    {
+        if (subscribedDispatcher == null)
+        {
+            return;
+        }
+
+        subscribedDispatcher.LoginResponseReceived -= HandleLoginResponse;
+        subscribedDispatcher.RegisterResponseReceived -= HandleRegisterResponse;
+        subscribedDispatcher.CharacterListReceived -= HandleCharacterList;
+        subscribedDispatcher = null;
+    }
+
+    /// 로그인 Canvas와 상태 Text가 아직 살아있는지 확인합니다.
+    private bool IsUiAlive()
+    {
+        return this != null && canvas != null && statusText != null;
+    }
+
+    /// 상태 문구 변경 전에 Text가 파괴됐는지 확인합니다.
+    private void SetStatus(string message)
+    {
+        if (statusText != null)
+        {
+            statusText.text = message;
+        }
     }
 }

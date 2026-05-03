@@ -8,27 +8,21 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     private Canvas canvas;
     private Text statusText;
     private readonly List<GameObject> slotObjects = new List<GameObject>();
+    private PacketDispatcher subscribedDispatcher;
 
     private void OnEnable()
     {
-        PacketDispatcher dispatcher = NetworkManager.Instance.Dispatcher;
-        dispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
-        dispatcher.CreateCharacterResponseReceived += HandleCreateCharacterResponse;
-        dispatcher.DeleteCharacterResponseReceived += HandleDeleteCharacterResponse;
-        dispatcher.CharacterListReceived += HandleCharacterList;
+        SubscribeDispatcher();
     }
 
     private void OnDisable()
     {
-        NetworkManager networkManager = FindFirstObjectByType<NetworkManager>();
-        if (networkManager != null)
-        {
-            PacketDispatcher dispatcher = networkManager.Dispatcher;
-            dispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
-            dispatcher.CreateCharacterResponseReceived -= HandleCreateCharacterResponse;
-            dispatcher.DeleteCharacterResponseReceived -= HandleDeleteCharacterResponse;
-            dispatcher.CharacterListReceived -= HandleCharacterList;
-        }
+        UnsubscribeDispatcher();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeDispatcher();
     }
 
     private void Start()
@@ -59,9 +53,17 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void RebuildCharacterSlots()
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         foreach (GameObject slotObject in slotObjects)
         {
-            Destroy(slotObject);
+            if (slotObject != null)
+            {
+                Destroy(slotObject);
+            }
         }
 
         slotObjects.Clear();
@@ -142,7 +144,7 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void RequestCreateCharacter(int slotIndex, ClassType classType)
     {
-        statusText.text = $"{GetClassNameKr(classType)} 캐릭터 생성 요청 중...";
+        SetStatus($"{GetClassNameKr(classType)} 캐릭터 생성 요청 중...");
         NetworkManager.Instance.SendPacket(new CreateCharacterRequestPacket(CharacterSession.Instance.AccountId, slotIndex, classType));
     }
 
@@ -152,14 +154,14 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void RequestEnterGame(CharacterData character)
     {
-        statusText.text = $"{character.Name} 입장 요청 중...";
+        SetStatus($"{character.Name} 입장 요청 중...");
         NetworkManager.Instance.SendPacket(new EnterGameRequestPacket(CharacterSession.Instance.AccountId, character.CharacterId));
     }
 
     /// 캐릭터 삭제는 클라이언트가 바로 지우지 않고 서버 검증 결과를 받은 뒤 반영합니다.
     private void RequestDeleteCharacter(CharacterData character)
     {
-        statusText.text = $"{character.Name} 삭제 요청 중...";
+        SetStatus($"{character.Name} 삭제 요청 중...");
         NetworkManager.Instance.SendPacket(new DeleteCharacterRequestPacket(CharacterSession.Instance.AccountId, character.CharacterId));
     }
 
@@ -168,28 +170,38 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void HandleCreateCharacterResponse(CreateCharacterResponsePacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         if (!packet.Success || packet.Character == null)
         {
-            statusText.text = $"캐릭터 생성 실패: {packet.Message}";
+            SetStatus($"캐릭터 생성 실패: {packet.Message}");
             return;
         }
 
         CharacterSession.Instance.UpsertCharacter(packet.Character);
-        statusText.text = $"{packet.Character.Name} 생성 완료.";
+        SetStatus($"{packet.Character.Name} 생성 완료.");
         RebuildCharacterSlots();
     }
 
     /// 삭제 성공 응답을 받으면 로컬 세션에서 제거하고 빈 슬롯으로 다시 보여줍니다.
     private void HandleDeleteCharacterResponse(DeleteCharacterResponsePacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         if (!packet.Success)
         {
-            statusText.text = $"캐릭터 삭제 실패: {packet.Message}";
+            SetStatus($"캐릭터 삭제 실패: {packet.Message}");
             return;
         }
 
         CharacterSession.Instance.RemoveCharacter(packet.CharacterId);
-        statusText.text = "캐릭터 삭제 완료.";
+        SetStatus("캐릭터 삭제 완료.");
         RebuildCharacterSlots();
     }
 
@@ -198,6 +210,11 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void HandleCharacterList(CharacterListPacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         CharacterSession.Instance.SetCharacters(packet.Characters);
         RebuildCharacterSlots();
     }
@@ -207,9 +224,14 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void HandleEnterGameResponse(EnterGameResponsePacket packet)
     {
+        if (!IsUiAlive())
+        {
+            return;
+        }
+
         if (!packet.Success || packet.Character == null)
         {
-            statusText.text = $"입장 실패: {packet.Message}";
+            SetStatus($"입장 실패: {packet.Message}");
             return;
         }
 
@@ -239,6 +261,51 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// NetworkManager가 DontDestroyOnLoad라 씬 전환 뒤에도 남는 이벤트를 같은 참조로 해제합니다.
+    private void SubscribeDispatcher()
+    {
+        if (subscribedDispatcher != null)
+        {
+            return;
+        }
+
+        subscribedDispatcher = NetworkManager.Instance.Dispatcher;
+        subscribedDispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
+        subscribedDispatcher.CreateCharacterResponseReceived += HandleCreateCharacterResponse;
+        subscribedDispatcher.DeleteCharacterResponseReceived += HandleDeleteCharacterResponse;
+        subscribedDispatcher.CharacterListReceived += HandleCharacterList;
+    }
+
+    /// Destroy된 UI가 서버 응답 이벤트를 다시 받지 않도록 구독을 정리합니다.
+    private void UnsubscribeDispatcher()
+    {
+        if (subscribedDispatcher == null)
+        {
+            return;
+        }
+
+        subscribedDispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
+        subscribedDispatcher.CreateCharacterResponseReceived -= HandleCreateCharacterResponse;
+        subscribedDispatcher.DeleteCharacterResponseReceived -= HandleDeleteCharacterResponse;
+        subscribedDispatcher.CharacterListReceived -= HandleCharacterList;
+        subscribedDispatcher = null;
+    }
+
+    /// 씬 전환으로 Canvas/Text가 이미 파괴된 경우 늦게 도착한 서버 응답을 무시합니다.
+    private bool IsUiAlive()
+    {
+        return this != null && canvas != null && statusText != null;
+    }
+
+    /// 상태 문구 변경 전에 Text가 아직 살아있는지 확인합니다.
+    private void SetStatus(string message)
+    {
+        if (statusText != null)
+        {
+            statusText.text = message;
+        }
     }
 
     /// <summary>
