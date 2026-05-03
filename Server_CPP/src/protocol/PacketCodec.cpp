@@ -75,11 +75,22 @@ std::string PacketCodec::EncodeCreateCharacterFail(const std::string& message)
     return "CREATE_CHARACTER_FAIL message=" + message;
 }
 
+std::string PacketCodec::EncodeDeleteCharacterOk(std::int32_t characterId)
+{
+    return "DELETE_CHARACTER_OK characterId=" + std::to_string(characterId) + " message=DeleteCharacterSuccess";
+}
+
+std::string PacketCodec::EncodeDeleteCharacterFail(std::int32_t characterId, const std::string& message)
+{
+    return "DELETE_CHARACTER_FAIL characterId=" + std::to_string(characterId) + " message=" + message;
+}
+
 std::string PacketCodec::EncodeCharacter(const CharacterData& character)
 {
     std::ostringstream stream;
     stream << "CHARACTER"
         << " id=" << character.characterId
+        << " slot=" << character.slotIndex
         << " name=" << character.name
         << " class=" << ToString(character.classType)
         << " level=" << character.level

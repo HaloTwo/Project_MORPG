@@ -14,6 +14,7 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         PacketDispatcher dispatcher = NetworkManager.Instance.Dispatcher;
         dispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
         dispatcher.CreateCharacterResponseReceived += HandleCreateCharacterResponse;
+        dispatcher.DeleteCharacterResponseReceived += HandleDeleteCharacterResponse;
         dispatcher.CharacterListReceived += HandleCharacterList;
     }
 
@@ -25,6 +26,7 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
             PacketDispatcher dispatcher = networkManager.Dispatcher;
             dispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
             dispatcher.CreateCharacterResponseReceived -= HandleCreateCharacterResponse;
+            dispatcher.DeleteCharacterResponseReceived -= HandleDeleteCharacterResponse;
             dispatcher.CharacterListReceived -= HandleCharacterList;
         }
     }
@@ -44,6 +46,10 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         RuntimeUiFactory.CreatePanel(canvas.transform, "Background", new Color(0.05f, 0.07f, 0.08f, 1.0f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         RuntimeUiFactory.CreateText(canvas.transform, "Title", "Character Select", 46, TextAnchor.MiddleCenter, Color.white, new Vector2(0.0f, 0.82f), new Vector2(1.0f, 0.94f), Vector2.zero, Vector2.zero);
         statusText = RuntimeUiFactory.CreateText(canvas.transform, "Status", "캐릭터를 선택하거나 빈 슬롯에 새 캐릭터를 생성하세요.", 24, TextAnchor.MiddleCenter, new Color(0.78f, 0.86f, 0.92f, 1.0f), new Vector2(0.0f, 0.74f), new Vector2(1.0f, 0.81f), Vector2.zero, Vector2.zero);
+
+        Button logoutButton = RuntimeUiFactory.CreateButton(canvas.transform, "LogoutButton", "로그아웃", new Vector2(0.84f, 0.88f), new Vector2(0.96f, 0.95f), Vector2.zero, Vector2.zero);
+        logoutButton.onClick.AddListener(Logout);
+
         RebuildCharacterSlots();
     }
 
@@ -60,10 +66,9 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
 
         slotObjects.Clear();
 
-        List<CharacterData> characters = CharacterSession.Instance.Characters;
         for (int i = 0; i < 3; i++)
         {
-            CharacterData character = i < characters.Count ? characters[i] : null;
+            CharacterData character = FindCharacterBySlot(i);
             float centerX = 0.24f + i * 0.26f;
             RectTransform card = RuntimeUiFactory.CreatePanel(canvas.transform, $"CharacterSlot_{i + 1}", character == null ? new Color(0.1f, 0.13f, 0.16f, 0.96f) : GetClassCardColor(character.ClassType), new Vector2(centerX - 0.11f, 0.25f), new Vector2(centerX + 0.11f, 0.69f), Vector2.zero, Vector2.zero);
             slotObjects.Add(card.gameObject);
@@ -79,17 +84,19 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 이미 생성된 캐릭터 슬롯을 표시하고 입장 버튼을 연결합니다.
-    /// </summary>
+    /// 이미 생성된 캐릭터 슬롯을 표시하고 입장/삭제 버튼을 연결합니다.
     private void BuildCharacterSlot(RectTransform card, CharacterData character)
     {
         RuntimeUiFactory.CreateText(card, "Name", character.Name, 32, TextAnchor.MiddleCenter, Color.white, new Vector2(0.0f, 0.68f), new Vector2(1.0f, 0.9f), Vector2.zero, Vector2.zero);
         RuntimeUiFactory.CreateText(card, "Class", character.GetClassNameKr(), 27, TextAnchor.MiddleCenter, Color.white, new Vector2(0.0f, 0.50f), new Vector2(1.0f, 0.66f), Vector2.zero, Vector2.zero);
         RuntimeUiFactory.CreateText(card, "Info", $"Lv.{character.Level}\nGold {character.Gold}", 21, TextAnchor.MiddleCenter, new Color(0.9f, 0.94f, 0.96f, 1.0f), new Vector2(0.0f, 0.30f), new Vector2(1.0f, 0.48f), Vector2.zero, Vector2.zero);
 
-        Button button = RuntimeUiFactory.CreateButton(card, "SelectButton", "입장", new Vector2(0.18f, 0.08f), new Vector2(0.82f, 0.22f), Vector2.zero, Vector2.zero);
-        button.onClick.AddListener(() => RequestEnterGame(character));
+        Button enterButton = RuntimeUiFactory.CreateButton(card, "SelectButton", "입장", new Vector2(0.18f, 0.17f), new Vector2(0.82f, 0.29f), Vector2.zero, Vector2.zero);
+        enterButton.onClick.AddListener(() => RequestEnterGame(character));
+
+        Button deleteButton = RuntimeUiFactory.CreateButton(card, "DeleteButton", "삭제", new Vector2(0.18f, 0.05f), new Vector2(0.82f, 0.15f), Vector2.zero, Vector2.zero);
+        deleteButton.GetComponent<Image>().color = new Color(0.36f, 0.08f, 0.08f, 0.96f);
+        deleteButton.onClick.AddListener(() => RequestDeleteCharacter(character));
     }
 
     /// <summary>
@@ -149,6 +156,13 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         NetworkManager.Instance.SendPacket(new EnterGameRequestPacket(CharacterSession.Instance.AccountId, character.CharacterId));
     }
 
+    /// 캐릭터 삭제는 클라이언트가 바로 지우지 않고 서버 검증 결과를 받은 뒤 반영합니다.
+    private void RequestDeleteCharacter(CharacterData character)
+    {
+        statusText.text = $"{character.Name} 삭제 요청 중...";
+        NetworkManager.Instance.SendPacket(new DeleteCharacterRequestPacket(CharacterSession.Instance.AccountId, character.CharacterId));
+    }
+
     /// <summary>
     /// 캐릭터 생성 성공 응답을 받으면 세션 목록에 반영하고 슬롯 UI를 다시 그립니다.
     /// </summary>
@@ -162,6 +176,20 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
 
         CharacterSession.Instance.UpsertCharacter(packet.Character);
         statusText.text = $"{packet.Character.Name} 생성 완료.";
+        RebuildCharacterSlots();
+    }
+
+    /// 삭제 성공 응답을 받으면 로컬 세션에서 제거하고 빈 슬롯으로 다시 보여줍니다.
+    private void HandleDeleteCharacterResponse(DeleteCharacterResponsePacket packet)
+    {
+        if (!packet.Success)
+        {
+            statusText.text = $"캐릭터 삭제 실패: {packet.Message}";
+            return;
+        }
+
+        CharacterSession.Instance.RemoveCharacter(packet.CharacterId);
+        statusText.text = "캐릭터 삭제 완료.";
         RebuildCharacterSlots();
     }
 
@@ -188,6 +216,29 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         CharacterSession.Instance.SetSelectedCharacter(packet.Character);
         SceneFlow.SetNextScene(SceneNames.Game);
         SceneManager.LoadScene(SceneNames.Loading);
+    }
+
+    /// 로그아웃은 계정/캐릭터 세션을 비우고 로그인 씬으로 돌아갑니다.
+    private void Logout()
+    {
+        CharacterSession.Instance.Clear();
+        NetworkManager.Instance.Disconnect();
+        SceneManager.LoadScene(SceneNames.Login);
+    }
+
+    /// DB 슬롯 번호를 기준으로 캐릭터를 찾습니다. 삭제 후 중간 슬롯이 비어도 UI가 밀리지 않습니다.
+    private CharacterData FindCharacterBySlot(int slotIndex)
+    {
+        List<CharacterData> characters = CharacterSession.Instance.Characters;
+        for (int i = 0; i < characters.Count; i++)
+        {
+            if (characters[i].SlotIndex == slotIndex)
+            {
+                return characters[i];
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

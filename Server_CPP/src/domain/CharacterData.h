@@ -16,6 +16,7 @@ struct CharacterData
 {
     std::int32_t characterId = 0;
     std::int32_t accountId = 0;
+    std::int32_t slotIndex = 0;
     std::string name;
     ClassType classType = ClassType::None;
     std::int32_t level = 1;

@@ -11,6 +11,8 @@
     RegisterResponse = 107,
     CreateCharacterRequest = 108,
     CreateCharacterResponse = 109,
+    DeleteCharacterRequest = 110,
+    DeleteCharacterResponse = 111,
 
     Move = 1001,
     Stop = 1002,

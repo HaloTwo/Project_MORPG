@@ -102,7 +102,7 @@ std::optional<CharacterData> MariaDbAccountRepository::FindCharacterById(std::in
     }
 
     std::ostringstream query;
-    query << "SELECT character_id, account_id, name, class_type, level, exp, gold, current_map_id, pos_x, pos_y, pos_z "
+    query << "SELECT character_id, account_id, slot_index, name, class_type, level, exp, gold, current_map_id, pos_x, pos_y, pos_z "
           << "FROM characters WHERE character_id = " << characterId << " LIMIT 1";
 
     if (!Execute(connection.get(), query.str()))
@@ -120,15 +120,16 @@ std::optional<CharacterData> MariaDbAccountRepository::FindCharacterById(std::in
     CharacterData character;
     character.characterId = ToInt(row[0]);
     character.accountId = ToInt(row[1]);
-    character.name = row[2] == nullptr ? "" : row[2];
-    character.classType = static_cast<ClassType>(ToInt(row[3]));
-    character.level = ToInt(row[4]);
-    character.exp = ToInt(row[5]);
-    character.gold = ToInt(row[6]);
-    character.currentMapId = ToInt(row[7]);
-    character.posX = ToFloat(row[8]);
-    character.posY = ToFloat(row[9]);
-    character.posZ = ToFloat(row[10]);
+    character.slotIndex = ToInt(row[2]);
+    character.name = row[3] == nullptr ? "" : row[3];
+    character.classType = static_cast<ClassType>(ToInt(row[4]));
+    character.level = ToInt(row[5]);
+    character.exp = ToInt(row[6]);
+    character.gold = ToInt(row[7]);
+    character.currentMapId = ToInt(row[8]);
+    character.posX = ToFloat(row[9]);
+    character.posY = ToFloat(row[10]);
+    character.posZ = ToFloat(row[11]);
     character.quickSlotSkillIds = LoadSkillIds(connection.get(), character.characterId);
     return character;
 }
@@ -204,6 +205,26 @@ std::optional<CharacterData> MariaDbAccountRepository::CreateCharacter(
     return FindCharacterById(characterId);
 }
 
+bool MariaDbAccountRepository::DeleteCharacter(std::int32_t accountId, std::int32_t characterId)
+{
+    MysqlHandle connection = Connect();
+    if (!connection)
+    {
+        return false;
+    }
+
+    std::ostringstream query;
+    query << "DELETE FROM characters WHERE account_id = "
+          << accountId << " AND character_id = " << characterId << " LIMIT 1";
+
+    if (!Execute(connection.get(), query.str()))
+    {
+        return false;
+    }
+
+    return mysql_affected_rows(connection.get()) == 1;
+}
+
 MariaDbAccountRepository::MysqlHandle MariaDbAccountRepository::Connect() const
 {
     MysqlHandle connection(mysql_init(nullptr), mysql_close);
@@ -265,7 +286,7 @@ std::optional<AccountData> MariaDbAccountRepository::LoadAccountByLogin(MYSQL* c
 std::vector<CharacterData> MariaDbAccountRepository::LoadCharacters(MYSQL* connection, std::int32_t accountId) const
 {
     std::ostringstream query;
-    query << "SELECT character_id, account_id, name, class_type, level, exp, gold, current_map_id, pos_x, pos_y, pos_z "
+    query << "SELECT character_id, account_id, slot_index, name, class_type, level, exp, gold, current_map_id, pos_x, pos_y, pos_z "
           << "FROM characters WHERE account_id = " << accountId << " ORDER BY slot_index";
 
     if (!Execute(connection, query.str()))
@@ -281,15 +302,16 @@ std::vector<CharacterData> MariaDbAccountRepository::LoadCharacters(MYSQL* conne
         CharacterData character;
         character.characterId = ToInt(row[0]);
         character.accountId = ToInt(row[1]);
-        character.name = row[2] == nullptr ? "" : row[2];
-        character.classType = static_cast<ClassType>(ToInt(row[3]));
-        character.level = ToInt(row[4]);
-        character.exp = ToInt(row[5]);
-        character.gold = ToInt(row[6]);
-        character.currentMapId = ToInt(row[7]);
-        character.posX = ToFloat(row[8]);
-        character.posY = ToFloat(row[9]);
-        character.posZ = ToFloat(row[10]);
+        character.slotIndex = ToInt(row[2]);
+        character.name = row[3] == nullptr ? "" : row[3];
+        character.classType = static_cast<ClassType>(ToInt(row[4]));
+        character.level = ToInt(row[5]);
+        character.exp = ToInt(row[6]);
+        character.gold = ToInt(row[7]);
+        character.currentMapId = ToInt(row[8]);
+        character.posX = ToFloat(row[9]);
+        character.posY = ToFloat(row[10]);
+        character.posZ = ToFloat(row[11]);
         characters.push_back(character);
     }
 

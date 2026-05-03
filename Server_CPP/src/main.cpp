@@ -20,6 +20,17 @@ namespace
 
         std::free(value);
     }
+
+    void PromptPasswordIfNeeded(MariaDbConfig& dbConfig)
+    {
+        if (!dbConfig.password.empty())
+        {
+            return;
+        }
+
+        std::cout << "[MariaDB] Enter password for user '" << dbConfig.user << "': ";
+        std::getline(std::cin, dbConfig.password);
+    }
 }
 
 int main(int argc, char* argv[])
@@ -40,6 +51,8 @@ int main(int argc, char* argv[])
     {
         dbConfig.password = argv[2];
     }
+
+    PromptPasswordIfNeeded(dbConfig);
 
     std::shared_ptr<IAccountRepository> repository = std::make_shared<MariaDbAccountRepository>(dbConfig);
     std::shared_ptr<AuthService> authService = std::make_shared<AuthService>(repository);

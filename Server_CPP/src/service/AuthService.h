@@ -27,6 +27,9 @@ public:
     /// </summary>
     std::string HandleCreateCharacter(std::int32_t accountId, std::int32_t slotIndex, ClassType classType);
 
+    /// DELETE_CHARACTER 요청을 처리하고 삭제 결과 응답을 반환합니다.
+    std::string HandleDeleteCharacter(std::int32_t accountId, std::int32_t characterId);
+
 private:
     std::shared_ptr<IAccountRepository> accountRepository_;
 };

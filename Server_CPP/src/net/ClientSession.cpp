@@ -117,6 +117,20 @@ bool ClientSession::HandleCommand(const std::string& line)
         return true;
     }
 
+    if (command.name == "DELETE_CHARACTER")
+    {
+        if (command.args.size() < 2)
+        {
+            SendLine(PacketCodec::EncodeDeleteCharacterFail(0, "InvalidDeleteCharacterFormat"));
+            return true;
+        }
+
+        const std::int32_t accountId = std::stoi(command.args[0]);
+        const std::int32_t characterId = std::stoi(command.args[1]);
+        SendLine(authService_->HandleDeleteCharacter(accountId, characterId));
+        return true;
+    }
+
     if (command.name == "ENTER_GAME")
     {
         if (command.args.empty())

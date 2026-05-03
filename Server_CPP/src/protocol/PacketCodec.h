@@ -52,6 +52,12 @@ public:
     /// </summary>
     static std::string EncodeCreateCharacterFail(const std::string& message);
 
+    /// 캐릭터 삭제 성공 응답을 텍스트 프로토콜로 만듭니다.
+    static std::string EncodeDeleteCharacterOk(std::int32_t characterId);
+
+    /// 캐릭터 삭제 실패 응답을 텍스트 프로토콜로 만듭니다.
+    static std::string EncodeDeleteCharacterFail(std::int32_t characterId, const std::string& message);
+
 private:
     static std::string EncodeCharacter(const CharacterData& character);
     static std::string JoinSkillIds(const std::vector<std::int32_t>& skillIds);

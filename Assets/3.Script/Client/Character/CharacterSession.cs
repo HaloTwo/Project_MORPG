@@ -33,6 +33,7 @@ public sealed class CharacterSession
     public void SetCharacters(List<CharacterData> characters)
     {
         Characters = characters ?? new List<CharacterData>();
+        SortBySlot();
     }
 
     /// <summary>
@@ -50,11 +51,31 @@ public sealed class CharacterSession
             if (Characters[i].CharacterId == character.CharacterId)
             {
                 Characters[i] = character;
+                SortBySlot();
                 return;
             }
         }
 
         Characters.Add(character);
+        SortBySlot();
+    }
+
+    /// 서버에서 삭제가 승인된 캐릭터를 세션 목록에서도 제거합니다.
+    public void RemoveCharacter(int characterId)
+    {
+        Characters.RemoveAll(character => character.CharacterId == characterId);
+        if (SelectedCharacter != null && SelectedCharacter.CharacterId == characterId)
+        {
+            SetSelectedCharacter(null);
+        }
+    }
+
+    /// 로그아웃 시 계정과 캐릭터 선택 상태를 모두 비웁니다.
+    public void Clear()
+    {
+        AccountId = 0;
+        Characters.Clear();
+        SetSelectedCharacter(null);
     }
 
     /// <summary>
@@ -65,5 +86,11 @@ public sealed class CharacterSession
     {
         SelectedCharacter = character;
         SelectedCharacterChanged?.Invoke(character);
+    }
+
+    /// 슬롯 번호 기준으로 정렬해 서버 저장 순서와 UI 표시 순서를 맞춥니다.
+    private void SortBySlot()
+    {
+        Characters.Sort((left, right) => left.SlotIndex.CompareTo(right.SlotIndex));
     }
 }

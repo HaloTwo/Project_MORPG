@@ -64,3 +64,13 @@ std::string AuthService::HandleCreateCharacter(std::int32_t accountId, std::int3
 
     return PacketCodec::EncodeCreateCharacterOk(character.value());
 }
+
+std::string AuthService::HandleDeleteCharacter(std::int32_t accountId, std::int32_t characterId)
+{
+    if (!accountRepository_->DeleteCharacter(accountId, characterId))
+    {
+        return PacketCodec::EncodeDeleteCharacterFail(characterId, "DeleteCharacterFailed");
+    }
+
+    return PacketCodec::EncodeDeleteCharacterOk(characterId);
+}

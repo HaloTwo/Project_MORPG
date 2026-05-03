@@ -5,6 +5,7 @@ public sealed class CharacterData
 {
     public int CharacterId;
     public int AccountId;
+    public int SlotIndex;
     public string Name;
     public ClassType ClassType;
     public int Level;

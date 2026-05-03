@@ -35,4 +35,7 @@ public:
         std::int32_t accountId,
         std::int32_t slotIndex,
         ClassType classType) = 0;
+
+    /// 계정 소유 캐릭터인지 확인 가능한 조건으로 캐릭터를 삭제합니다.
+    virtual bool DeleteCharacter(std::int32_t accountId, std::int32_t characterId) = 0;
 };

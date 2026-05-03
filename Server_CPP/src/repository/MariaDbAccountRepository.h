@@ -13,7 +13,7 @@ struct MariaDbConfig
     std::string host = "127.0.0.1";
     unsigned int port = 3306;
     std::string user = "root";
-    std::string password = "1234";
+    std::string password;
     std::string database = "project_morpg";
 };
 
@@ -36,6 +36,8 @@ public:
         std::int32_t accountId,
         std::int32_t slotIndex,
         ClassType classType) override;
+
+    bool DeleteCharacter(std::int32_t accountId, std::int32_t characterId) override;
 
 private:
     using MysqlHandle = std::unique_ptr<MYSQL, void(*)(MYSQL*)>;

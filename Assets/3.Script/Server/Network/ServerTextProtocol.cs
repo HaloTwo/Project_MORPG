@@ -20,6 +20,8 @@ public sealed class ServerTextProtocol
                 return $"REGISTER {register.LoginId} {register.Password}";
             case CreateCharacterRequestPacket create:
                 return $"CREATE_CHARACTER {create.AccountId} {create.SlotIndex} {create.ClassType}";
+            case DeleteCharacterRequestPacket delete:
+                return $"DELETE_CHARACTER {delete.AccountId} {delete.CharacterId}";
             case EnterGameRequestPacket enter:
                 return $"ENTER_GAME {enter.CharacterId}";
             default:
@@ -94,6 +96,20 @@ public sealed class ServerTextProtocol
             yield break;
         }
 
+        if (line.StartsWith("DELETE_CHARACTER_OK", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new DeleteCharacterResponsePacket(true, ReadInt(values, "characterId"), ReadString(values, "message", "DeleteCharacterSuccess"));
+            yield break;
+        }
+
+        if (line.StartsWith("DELETE_CHARACTER_FAIL", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new DeleteCharacterResponsePacket(false, ReadInt(values, "characterId"), ReadString(values, "message", "DeleteCharacterFailed"));
+            yield break;
+        }
+
         if (line.StartsWith("ENTER_GAME_OK", StringComparison.OrdinalIgnoreCase))
         {
             CharacterData character = ParseCharacter(line.Replace("ENTER_GAME_OK ", string.Empty));
@@ -121,6 +137,7 @@ public sealed class ServerTextProtocol
         {
             CharacterId = ReadInt(values, "id"),
             AccountId = currentAccountId,
+            SlotIndex = ReadInt(values, "slot"),
             Name = ReadString(values, "name", "Character"),
             ClassType = ReadClassType(values),
             Level = ReadInt(values, "level", 1),

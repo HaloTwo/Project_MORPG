@@ -8,6 +8,7 @@ public sealed class PacketDispatcher
     public event Action<CharacterListPacket> CharacterListReceived;
     public event Action<EnterGameResponsePacket> EnterGameResponseReceived;
     public event Action<CreateCharacterResponsePacket> CreateCharacterResponseReceived;
+    public event Action<DeleteCharacterResponsePacket> DeleteCharacterResponseReceived;
     public event Action<MovePacket> MoveReceived;
     public event Action<StopPacket> StopReceived;
     public event Action<SpawnPacket> SpawnReceived;
@@ -38,6 +39,9 @@ public sealed class PacketDispatcher
                 break;
             case PacketId.CreateCharacterResponse:
                 HandleCreateCharacterResponse((CreateCharacterResponsePacket)packet);
+                break;
+            case PacketId.DeleteCharacterResponse:
+                HandleDeleteCharacterResponse((DeleteCharacterResponsePacket)packet);
                 break;
             case PacketId.Move:
                 HandleMove((MovePacket)packet);
@@ -99,6 +103,13 @@ public sealed class PacketDispatcher
     {
         Debug.Log($"[PacketDispatcher] CreateCharacter success={packet.Success}");
         CreateCharacterResponseReceived?.Invoke(packet);
+    }
+
+    /// 캐릭터 삭제 결과를 캐릭터 선택 화면으로 전달합니다.
+    private void HandleDeleteCharacterResponse(DeleteCharacterResponsePacket packet)
+    {
+        Debug.Log($"[PacketDispatcher] DeleteCharacter success={packet.Success} character={packet.CharacterId}");
+        DeleteCharacterResponseReceived?.Invoke(packet);
     }
 
     // 서버 또는 로컬 시뮬레이션에서 받은 이동 동기화 패킷을 처리합니다.
