@@ -8,7 +8,7 @@
 - 개발 인원: 1인
 - 개발 기간: 2026.05 ~ 진행 중
 - 현재 개발 기간: 3일차
-- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB
+- 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex
 - 핵심 키워드: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB
 
 ---
