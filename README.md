@@ -171,6 +171,12 @@ equipment
 9. GameScene 입장 후 캐릭터 선택창으로 복귀 가능
 ```
 
+## 🎥 동작 GIF
+
+| 캐릭터 선택 / 생성 흐름 |
+|---|
+| ![](Image/character-select.gif) |
+
 <details>
 <summary><b>실행 관련 메모 펼치기/닫기</b></summary>
 

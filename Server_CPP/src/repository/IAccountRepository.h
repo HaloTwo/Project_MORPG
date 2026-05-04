@@ -11,31 +11,27 @@ class IAccountRepository
 public:
     virtual ~IAccountRepository() = default;
 
-    // 로그인 ID와 토큰을 검증하고 계정 정보를 가져옵니다.
+    // 로그인 ID와 인증 값을 검증하고 계정 정보와 캐릭터 목록을 가져옵니다.
     virtual std::optional<AccountData> FindAccountByLogin(
         const std::string& loginId,
         const std::string& authToken) = 0;
 
-    /// <summary>
-    /// 회원가입 요청을 처리해 새 계정을 저장합니다.
-    /// 같은 로그인 ID가 이미 있으면 std::nullopt를 반환합니다.
-    /// </summary>
+    // 회원가입 요청을 처리하고 새 계정 정보를 반환합니다.
+    // 같은 loginId가 이미 있거나 입력값이 잘못되면 std::nullopt를 반환합니다.
     virtual std::optional<AccountData> RegisterAccount(
         const std::string& loginId,
         const std::string& password) = 0;
 
-    // 캐릭터 ID로 캐릭터 상세 정보를 가져옵니다.
+    // 캐릭터 ID로 캐릭터 상세 정보와 스킬 슬롯 정보를 가져옵니다.
     virtual std::optional<CharacterData> FindCharacterById(std::int32_t characterId) = 0;
 
-    /// <summary>
-    /// 계정에 새 캐릭터를 생성합니다.
-    /// 서버는 계정 존재 여부, 3개 제한, 직업 유효성을 검사한 뒤 저장합니다.
-    /// </summary>
+    // 특정 계정에 새 캐릭터를 생성합니다.
+    // 서버가 슬롯 범위, 최대 캐릭터 수, 직업 유효성을 검증한 뒤 저장합니다.
     virtual std::optional<CharacterData> CreateCharacter(
         std::int32_t accountId,
         std::int32_t slotIndex,
         ClassType classType) = 0;
 
-    /// 계정 소유 캐릭터인지 확인 가능한 조건으로 캐릭터를 삭제합니다.
+    // 계정 소유 캐릭터인지 확인 가능한 조건으로 캐릭터를 삭제합니다.
     virtual bool DeleteCharacter(std::int32_t accountId, std::int32_t characterId) = 0;
 };

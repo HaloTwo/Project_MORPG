@@ -4,13 +4,21 @@ using UnityEngine.UI;
 
 public sealed class LoginSceneController : MonoBehaviour
 {
-    private Canvas canvas;
-    private InputField loginIdInput;
-    private InputField passwordInput;
-    private InputField registerIdInput;
-    private InputField registerPasswordInput;
-    private Text statusText;
-    private GameObject registerDialog;
+    [Header("Scene UI")]
+    [SerializeField] private Canvas canvas;
+    [SerializeField] private InputField loginIdInput;
+    [SerializeField] private InputField passwordInput;
+    [SerializeField] private Button loginButton;
+    [SerializeField] private Button registerButton;
+    [SerializeField] private Text statusText;
+
+    [Header("Register Dialog")]
+    [SerializeField] private GameObject registerDialog;
+    [SerializeField] private InputField registerIdInput;
+    [SerializeField] private InputField registerPasswordInput;
+    [SerializeField] private Button registerCreateButton;
+    [SerializeField] private Button registerCancelButton;
+
     private bool receivedLogin;
     private bool receivedCharacters;
     private PacketDispatcher subscribedDispatcher;
@@ -33,7 +41,13 @@ public sealed class LoginSceneController : MonoBehaviour
     private void Start()
     {
         NetworkManager.Instance.Connect();
-        BuildUi();
+        BindSceneUiIfNeeded();
+        if (!IsUiAlive())
+        {
+            BuildUi();
+        }
+
+        WireUiEvents();
     }
 
     /// <summary>
@@ -53,11 +67,58 @@ public sealed class LoginSceneController : MonoBehaviour
         passwordInput = RuntimeUiFactory.CreateInputField(panel, "PasswordInput", "비밀번호", true, new Vector2(0.12f, 0.40f), new Vector2(0.88f, 0.50f), Vector2.zero, Vector2.zero);
         statusText = RuntimeUiFactory.CreateText(panel, "Status", "아이디와 비밀번호를 입력하세요. 테스트 계정: test_user / 1234", 21, TextAnchor.MiddleCenter, new Color(0.88f, 0.92f, 0.95f, 1.0f), new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.36f), Vector2.zero, Vector2.zero);
 
-        Button loginButton = RuntimeUiFactory.CreateButton(panel, "LoginButton", "로그인", new Vector2(0.12f, 0.10f), new Vector2(0.48f, 0.21f), Vector2.zero, Vector2.zero);
-        loginButton.onClick.AddListener(RequestLogin);
+        loginButton = RuntimeUiFactory.CreateButton(panel, "LoginButton", "로그인", new Vector2(0.12f, 0.10f), new Vector2(0.48f, 0.21f), Vector2.zero, Vector2.zero);
 
-        Button registerButton = RuntimeUiFactory.CreateButton(panel, "RegisterButton", "회원가입", new Vector2(0.52f, 0.10f), new Vector2(0.88f, 0.21f), Vector2.zero, Vector2.zero);
-        registerButton.onClick.AddListener(ShowRegisterDialog);
+        registerButton = RuntimeUiFactory.CreateButton(panel, "RegisterButton", "회원가입", new Vector2(0.52f, 0.10f), new Vector2(0.88f, 0.21f), Vector2.zero, Vector2.zero);
+    }
+
+    // 씬에 미리 배치된 UI 오브젝트가 있으면 이름 기준으로 찾아 연결합니다.
+    private void BindSceneUiIfNeeded()
+    {
+        canvas = canvas != null ? canvas : GameObject.Find("LoginCanvas")?.GetComponent<Canvas>();
+        loginIdInput = loginIdInput != null ? loginIdInput : GameObject.Find("LoginIdInput")?.GetComponent<InputField>();
+        passwordInput = passwordInput != null ? passwordInput : GameObject.Find("PasswordInput")?.GetComponent<InputField>();
+        loginButton = loginButton != null ? loginButton : GameObject.Find("LoginButton")?.GetComponent<Button>();
+        registerButton = registerButton != null ? registerButton : GameObject.Find("RegisterButton")?.GetComponent<Button>();
+        statusText = statusText != null ? statusText : GameObject.Find("Status")?.GetComponent<Text>();
+        registerDialog = registerDialog != null ? registerDialog : GameObject.Find("RegisterDialog");
+        registerIdInput = registerIdInput != null ? registerIdInput : GameObject.Find("RegisterIdInput")?.GetComponent<InputField>();
+        registerPasswordInput = registerPasswordInput != null ? registerPasswordInput : GameObject.Find("RegisterPasswordInput")?.GetComponent<InputField>();
+        registerCreateButton = registerCreateButton != null ? registerCreateButton : GameObject.Find("CreateAccountButton")?.GetComponent<Button>();
+        registerCancelButton = registerCancelButton != null ? registerCancelButton : GameObject.Find("CancelButton")?.GetComponent<Button>();
+
+        if (registerDialog != null)
+        {
+            registerDialog.SetActive(false);
+        }
+    }
+
+    // 런타임 생성 UI와 씬 배치 UI 모두 같은 버튼 이벤트를 사용하도록 연결합니다.
+    private void WireUiEvents()
+    {
+        if (loginButton != null)
+        {
+            loginButton.onClick.RemoveListener(RequestLogin);
+            loginButton.onClick.AddListener(RequestLogin);
+        }
+
+        if (registerButton != null)
+        {
+            registerButton.onClick.RemoveListener(ShowRegisterDialog);
+            registerButton.onClick.AddListener(ShowRegisterDialog);
+        }
+
+        if (registerCreateButton != null)
+        {
+            registerCreateButton.onClick.RemoveListener(RequestRegister);
+            registerCreateButton.onClick.AddListener(RequestRegister);
+        }
+
+        if (registerCancelButton != null)
+        {
+            registerCancelButton.onClick.RemoveListener(HideRegisterDialog);
+            registerCancelButton.onClick.AddListener(HideRegisterDialog);
+        }
     }
 
     /// <summary>
@@ -211,6 +272,7 @@ public sealed class LoginSceneController : MonoBehaviour
     {
         if (registerDialog != null)
         {
+            registerDialog.SetActive(true);
             return;
         }
 
@@ -224,11 +286,11 @@ public sealed class LoginSceneController : MonoBehaviour
         registerIdInput = RuntimeUiFactory.CreateInputField(panel, "RegisterIdInput", "아이디", false, new Vector2(0.12f, 0.50f), new Vector2(0.88f, 0.61f), Vector2.zero, Vector2.zero);
         registerPasswordInput = RuntimeUiFactory.CreateInputField(panel, "RegisterPasswordInput", "비밀번호", true, new Vector2(0.12f, 0.35f), new Vector2(0.88f, 0.46f), Vector2.zero, Vector2.zero);
 
-        Button createButton = RuntimeUiFactory.CreateButton(panel, "CreateAccountButton", "생성", new Vector2(0.12f, 0.13f), new Vector2(0.48f, 0.25f), Vector2.zero, Vector2.zero);
-        createButton.onClick.AddListener(RequestRegister);
+        registerCreateButton = RuntimeUiFactory.CreateButton(panel, "CreateAccountButton", "생성", new Vector2(0.12f, 0.13f), new Vector2(0.48f, 0.25f), Vector2.zero, Vector2.zero);
+        registerCreateButton.onClick.AddListener(RequestRegister);
 
-        Button cancelButton = RuntimeUiFactory.CreateButton(panel, "CancelButton", "취소", new Vector2(0.52f, 0.13f), new Vector2(0.88f, 0.25f), Vector2.zero, Vector2.zero);
-        cancelButton.onClick.AddListener(HideRegisterDialog);
+        registerCancelButton = RuntimeUiFactory.CreateButton(panel, "CancelButton", "취소", new Vector2(0.52f, 0.13f), new Vector2(0.88f, 0.25f), Vector2.zero, Vector2.zero);
+        registerCancelButton.onClick.AddListener(HideRegisterDialog);
     }
 
     /// 회원가입 팝업을 닫고 임시 입력 참조를 정리합니다.
@@ -236,12 +298,8 @@ public sealed class LoginSceneController : MonoBehaviour
     {
         if (registerDialog != null)
         {
-            Destroy(registerDialog);
+            registerDialog.SetActive(false);
         }
-
-        registerDialog = null;
-        registerIdInput = null;
-        registerPasswordInput = null;
     }
 
     /// 서버 내부 메시지를 일반 사용자가 이해할 수 있는 문장으로 바꿔 UI에 표시합니다.

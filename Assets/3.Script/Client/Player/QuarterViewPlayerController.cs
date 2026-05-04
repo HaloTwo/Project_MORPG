@@ -148,7 +148,8 @@ public sealed class QuarterViewPlayerController : MonoBehaviour
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
     }
 
-    // 이동 시작, 이동 중 방향 갱신, 정지 시점에 패킷 이벤트를 발생시킵니다.
+    // 이동 상태를 매 프레임 검사하되, 패킷은 시작/방향 변경/주기적 보정/정지 시점에만 보냅니다.
+    // 실시간 이동은 Update로 입력을 읽을 수밖에 없지만, 네트워크 송신까지 매 프레임 때리지는 않도록 제한합니다.
     private void DetectMoveState(Vector3 moveDirection)
     {
         bool isMoving = moveDirection.sqrMagnitude > 0.001f;
