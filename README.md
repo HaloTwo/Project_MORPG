@@ -11,7 +11,6 @@
 
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
-- 현재 진행 상황: 개발 3일차
 - 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex, Unity MCP
 - 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Runtime UI, Automation Test Flow
 
