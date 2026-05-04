@@ -61,16 +61,6 @@ Unity는 서버에 요청만 보내고,
 > 캐릭터 슬롯은 단순 리스트 순서가 아니라 DB의 `slot_index`를 기준으로 표시합니다.
 > 그래서 2번 슬롯 캐릭터만 삭제해도 1번/3번 슬롯 위치가 유지됩니다.
 
-## 🗺 GameScene / Quarter-View Map
-
-- `Map` 루트 아래에 RPGPP_LT 배경 에셋을 배치해 쿼터뷰 필드 구성
-- URP 프로젝트에 맞게 외부 에셋 머티리얼을 URP/Lit 기반으로 변환
-- 건물, 울타리, 바위, 나무, 지형, 주요 소품 프리팹에 Collider 사전 세팅
-- 구름, 꽃, 작은 풀, 덤불 등 이동을 막지 않아야 하는 장식 에셋은 충돌 제외
-- 조이스틱 이동 + 쿼터뷰 카메라 기준으로 GameScene 탐색 가능
-
-> 배경 충돌을 런타임에 매번 생성하지 않고, 프리팹/모델 import 단계에서 미리 세팅했습니다.<br>
-> 씬 실행 시 불필요한 Map 스캔 비용을 줄이고, 이후 NavMesh나 몬스터 배치 작업으로 확장하기 쉬운 구조를 목표로 했습니다.
 
 ## 🌐 TCP 네트워크 흐름
 
@@ -235,6 +225,17 @@ equipment
 ![](Image/04-relogin-server-disconnect.gif)
 
 </details>
+
+<details>
+<summary><b>05. 캐릭터 이동 및 조이스틱</b></summary>
+
+<br>
+
+![](Image/05-character-move-joystick.gif)
+
+</details>
+
+
 
 <details>
 <summary><b>실행 관련 메모 펼치기/닫기</b></summary>
