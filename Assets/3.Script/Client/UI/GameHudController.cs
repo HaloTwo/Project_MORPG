@@ -15,9 +15,10 @@ public sealed class GameHudController : MonoBehaviour
     private void BuildUi()
     {
         Canvas canvas = RuntimeUiFactory.CreateCanvas("GameHudCanvas");
+        canvas.sortingOrder = 10;
 
-        RectTransform joystickRoot = RuntimeUiFactory.CreatePanel(canvas.transform, "VirtualJoystick", new Color(1.0f, 1.0f, 1.0f, 0.12f), new Vector2(0.04f, 0.06f), new Vector2(0.20f, 0.34f), Vector2.zero, Vector2.zero);
-        joystickRoot.gameObject.AddComponent<VirtualJoystick>();
+        RectTransform joystickInputLayer = RuntimeUiFactory.CreatePanel(canvas.transform, "VirtualJoystickInputLayer", new Color(1.0f, 1.0f, 1.0f, 0.0f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        joystickInputLayer.gameObject.AddComponent<VirtualJoystick>();
 
         RectTransform infoPanel = RuntimeUiFactory.CreatePanel(canvas.transform, "InfoPanel", new Color(0.04f, 0.07f, 0.09f, 0.72f), new Vector2(0.02f, 0.88f), new Vector2(0.36f, 0.98f), Vector2.zero, Vector2.zero);
         characterText = RuntimeUiFactory.CreateText(infoPanel, "CharacterText", "Character", 22, TextAnchor.MiddleLeft, Color.white, new Vector2(0.05f, 0.0f), new Vector2(0.95f, 1.0f), Vector2.zero, Vector2.zero);

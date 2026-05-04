@@ -4,6 +4,8 @@
 
 ClientCommand PacketCodec::DecodeClientCommand(const std::string& line)
 {
+    // 공백 기준으로 첫 단어는 명령 이름, 이후 단어들은 인자로 분리합니다.
+    // 예: "LOGIN test_user 1234" -> name=LOGIN, args=[test_user, 1234]
     std::istringstream stream(line);
     ClientCommand command;
     stream >> command.name;
@@ -19,6 +21,7 @@ ClientCommand PacketCodec::DecodeClientCommand(const std::string& line)
 
 std::string PacketCodec::EncodeLoginOk(const AccountData& account)
 {
+    // 로그인 성공 후 Unity가 accountId를 세션에 저장할 수 있도록 내려줍니다.
     std::ostringstream stream;
     stream << "LOGIN_OK accountId=" << account.accountId << " message=LoginSuccess";
     return stream.str();
@@ -26,11 +29,13 @@ std::string PacketCodec::EncodeLoginOk(const AccountData& account)
 
 std::string PacketCodec::EncodeLoginFail(const std::string& message)
 {
+    // 로그인 실패 이유는 간단한 message 필드로 내려줍니다.
     return "LOGIN_FAIL message=" + message;
 }
 
 std::string PacketCodec::EncodeRegisterOk(const AccountData& account)
 {
+    // 회원가입 성공 시 새 accountId를 내려줍니다.
     std::ostringstream stream;
     stream << "REGISTER_OK accountId=" << account.accountId << " message=RegisterSuccess";
     return stream.str();
@@ -43,6 +48,10 @@ std::string PacketCodec::EncodeRegisterFail(const std::string& message)
 
 std::vector<std::string> PacketCodec::EncodeCharacterList(const std::vector<CharacterData>& characters)
 {
+    // 캐릭터 목록은 여러 줄로 전송합니다.
+    // 시작 줄: CHARACTER_LIST count=N
+    // 캐릭터 줄들: CHARACTER ...
+    // 종료 줄: CHARACTER_LIST_END
     std::vector<std::string> lines;
     lines.emplace_back("CHARACTER_LIST count=" + std::to_string(characters.size()));
 
@@ -57,6 +66,7 @@ std::vector<std::string> PacketCodec::EncodeCharacterList(const std::vector<Char
 
 std::string PacketCodec::EncodeEnterGameOk(const CharacterData& character)
 {
+    // 게임 입장 성공 시 선택 캐릭터 정보를 한 줄에 포함합니다.
     return "ENTER_GAME_OK " + EncodeCharacter(character);
 }
 
@@ -87,6 +97,8 @@ std::string PacketCodec::EncodeDeleteCharacterFail(std::int32_t characterId, con
 
 std::string PacketCodec::EncodeCharacter(const CharacterData& character)
 {
+    // CharacterData를 현재 텍스트 프로토콜 포맷으로 직렬화합니다.
+    // 나중에 바이너리 패킷/Protobuf로 바꿀 때 이 계층이 교체 대상입니다.
     std::ostringstream stream;
     stream << "CHARACTER"
         << " id=" << character.characterId
@@ -102,6 +114,8 @@ std::string PacketCodec::EncodeCharacter(const CharacterData& character)
 
 std::string PacketCodec::JoinSkillIds(const std::vector<std::int32_t>& skillIds)
 {
+    // 스킬 슬롯 배열을 콤마 문자열로 변환합니다.
+    // 예: [1001,1002,1003] -> "1001,1002,1003"
     std::ostringstream stream;
     for (std::size_t i = 0; i < skillIds.size(); ++i)
     {

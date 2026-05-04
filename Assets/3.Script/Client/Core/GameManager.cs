@@ -235,6 +235,7 @@ public sealed class GameManager : MonoBehaviour
     private void BuildReturnButton()
     {
         Canvas canvas = RuntimeUiFactory.CreateCanvas("GameMenuCanvas");
+        canvas.sortingOrder = 100;
         Button returnButton = RuntimeUiFactory.CreateButton(canvas.transform, "ReturnCharacterSelectButton", "캐릭터 선택", new Vector2(0.84f, 0.90f), new Vector2(0.98f, 0.97f), Vector2.zero, Vector2.zero);
         returnButton.onClick.AddListener(ReturnToCharacterSelect);
     }
