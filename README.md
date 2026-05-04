@@ -1,28 +1,28 @@
-# 🎮 Project MORPG
+﻿# 🎮 Project MORPG
 
 ## C++ TCP Server 기반 Unity 3D Quarter-View MORPG
 
-> Unity 클라이언트가 DB를 직접 다루지 않고,  
-> **C++ TCP 서버가 계정 인증, 회원가입, 캐릭터 생성/삭제, 입장 흐름을 검증한 뒤  
+> Unity 클라이언트가 DB를 직접 다루지 않고,
+> **C++ TCP 서버가 계정 인증, 회원가입, 캐릭터 생성/삭제, 입장 흐름을 검증한 뒤
 > MariaDB에 데이터를 저장하는 구조**로 설계한 MORPG 프로젝트입니다.
 >
-> 현재는 온라인 RPG의 가장 앞단인  
+> 현재는 온라인 RPG의 가장 앞단인
 > **계정 → 캐릭터 슬롯 → 캐릭터 생성/삭제 → 게임 입장** 흐름을 먼저 구현했습니다.
 
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
 - 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex, Unity MCP
-- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Runtime UI, Automation Test Flow
+- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Runtime UI, URP Asset Pipeline, Prefab Collision Setup
 
 ---
 
 ## 🎯 프로젝트 목표
 
-> 온라인 RPG는 클라이언트가 “된다/안 된다”를 최종 판단하면 위험하다고 생각했습니다.  
+> 온라인 RPG는 클라이언트가 “된다/안 된다”를 최종 판단하면 위험하다고 생각했습니다.
 > 그래서 Unity는 입력과 화면 흐름을 담당하고, 실제 계정과 캐릭터 데이터는 서버가 검증하도록 분리했습니다.
 
-현재는 빠른 검증을 위해 Blocking TCP + Text Protocol로 시작했습니다.  
-다만 Unity 패킷, 서버 세션, 서비스 계층, DB Repository를 분리해 두어  
+현재는 빠른 검증을 위해 Blocking TCP + Text Protocol로 시작했습니다.
+다만 Unity 패킷, 서버 세션, 서비스 계층, DB Repository를 분리해 두어
 이후 IOCP 서버나 Binary Packet 구조로 확장할 수 있게 설계했습니다.
 
 ```text
@@ -31,7 +31,7 @@ Unity Client
 → MariaDB
 ```
 
-Unity는 서버에 요청만 보내고,  
+Unity는 서버에 요청만 보내고,
 로그인 성공 여부와 캐릭터 저장/삭제는 서버와 DB가 결정합니다.
 
 ---
@@ -46,7 +46,7 @@ Unity는 서버에 요청만 보내고,
 - 로그인 실패 시 사용자용 메시지 표시
 - 서버 미실행 또는 연결 끊김 시 종료 팝업 처리
 
-> 계정 검증은 Unity가 아니라 C++ 서버의 `AuthService`와 `MariaDbAccountRepository`가 담당합니다.  
+> 계정 검증은 Unity가 아니라 C++ 서버의 `AuthService`와 `MariaDbAccountRepository`가 담당합니다.
 > Unity는 입력값을 패킷으로 보내고, 서버 응답에 따라 화면만 전환합니다.
 
 ## 👤 캐릭터 슬롯 시스템
@@ -58,8 +58,19 @@ Unity는 서버에 요청만 보내고,
 - 삭제 후에도 슬롯 번호가 밀리지 않도록 `slot_index` 기준으로 UI 표시
 - 게임 씬에서 캐릭터 선택창으로 돌아가기 지원
 
-> 캐릭터 슬롯은 단순 리스트 순서가 아니라 DB의 `slot_index`를 기준으로 표시합니다.  
+> 캐릭터 슬롯은 단순 리스트 순서가 아니라 DB의 `slot_index`를 기준으로 표시합니다.
 > 그래서 2번 슬롯 캐릭터만 삭제해도 1번/3번 슬롯 위치가 유지됩니다.
+
+## 🗺 GameScene / Quarter-View Map
+
+- `Map` 루트 아래에 RPGPP_LT 배경 에셋을 배치해 쿼터뷰 필드 구성
+- URP 프로젝트에 맞게 외부 에셋 머티리얼을 URP/Lit 기반으로 변환
+- 건물, 울타리, 바위, 나무, 지형, 주요 소품 프리팹에 Collider 사전 세팅
+- 구름, 꽃, 작은 풀, 덤불 등 이동을 막지 않아야 하는 장식 에셋은 충돌 제외
+- 조이스틱 이동 + 쿼터뷰 카메라 기준으로 GameScene 탐색 가능
+
+> 배경 충돌을 런타임에 매번 생성하지 않고, 프리팹/모델 import 단계에서 미리 세팅했습니다.<br>
+> 씬 실행 시 불필요한 Map 스캔 비용을 줄이고, 이후 NavMesh나 몬스터 배치 작업으로 확장하기 쉬운 구조를 목표로 했습니다.
 
 ## 🌐 TCP 네트워크 흐름
 
@@ -122,7 +133,7 @@ equipment
 - Runtime uGUI 방식으로 로그인/선택 UI를 코드에서 생성
 - GitHub를 기준으로 작업 변경사항 관리
 
-> 초반에는 빠르게 UI를 바꾸고 테스트해야 했기 때문에,  
+> 초반에는 빠르게 UI를 바꾸고 테스트해야 했기 때문에,
 > 씬에 UI를 직접 배치하기보다 코드 기반 Runtime UI로 검증 속도를 우선했습니다.
 
 </details>
@@ -135,7 +146,7 @@ equipment
 - `LOGIN`, `ENTER_GAME`, `PING`, `QUIT` 명령 처리
 - Packet / Dispatcher / Protocol 구조 분리
 
-> 처음부터 복잡한 IOCP 서버로 가지 않고 Blocking TCP로 시작했습니다.  
+> 처음부터 복잡한 IOCP 서버로 가지 않고 Blocking TCP로 시작했습니다.
 > 목적은 성능 최적화보다 “Unity → Server → 응답 처리” 흐름을 먼저 검증하는 것이었습니다.
 
 </details>
@@ -150,8 +161,23 @@ equipment
 - 캐릭터 삭제, 로그아웃, 캐릭터 선택 복귀 흐름 추가
 - 서버 연결 실패 시 사용자 팝업 처리
 
-> Unity에서 DB에 직접 접근하지 않고 C++ 서버만 DB를 다루도록 결정했습니다.  
+> Unity에서 DB에 직접 접근하지 않고 C++ 서버만 DB를 다루도록 결정했습니다.
 > 이 구조가 이후 인벤토리, 장비, 전투 판정처럼 신뢰가 필요한 기능을 확장하기 좋다고 판단했습니다.
+
+</details>
+
+<details>
+<summary><b>4일차 - GameScene 맵 구성과 외부 에셋 적용</b></summary>
+
+- RPGPP_LT 배경 에셋을 GameScene의 `Map` 루트 아래에 배치
+- Unity 6 URP 환경에 맞춰 외부 에셋 머티리얼을 URP/Lit 셰이더로 변환
+- 캐릭터/애니메이션/무기 에셋을 넣기 위한 모델·애니메이션 슬롯 폴더 정리
+- 쿼터뷰 카메라, 조이스틱 이동, GameScene 복귀 흐름과 맵 배치를 함께 점검
+- 배경 프리팹 및 FBX 모델 import 설정에 Collider를 사전 적용
+- 이동을 막아야 하는 지형/건물/소품과 지나갈 수 있는 장식 에셋을 구분
+
+> 단순히 배경을 배치하는 단계에서 끝내지 않고, 실제 플레이어 이동이 가능한 필드로 만들기 위해<br>
+> 머티리얼 변환, 프리팹 충돌 세팅, GameScene 월드 구성을 함께 정리했습니다.
 
 </details>
 
@@ -168,7 +194,8 @@ equipment
 6. CharacterSelectScene에서 3슬롯 표시
 7. 빈 슬롯에서 캐릭터 생성
 8. 생성된 캐릭터 입장 또는 삭제
-9. GameScene 입장 후 캐릭터 선택창으로 복귀 가능
+9. GameScene 입장 후 쿼터뷰 맵에서 조이스틱 이동
+10. 캐릭터 선택창으로 복귀 가능
 ```
 
 ## 🎥 동작 GIF
@@ -233,4 +260,6 @@ equipment
 - 스킬 사용 요청과 서버 검증
 - HP / 데미지 계산 서버 처리
 - 이동 패킷 검증
+- NavMesh 기반 이동 가능 영역 정리
+- 맵 오브젝트별 충돌 박스 세밀 조정
 - Blocking TCP 서버를 IOCP 기반 구조로 개선
