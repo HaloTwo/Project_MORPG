@@ -173,24 +173,46 @@ equipment
 
 ## 🎥 동작 GIF
 
-| 01. 서버 연결 후 로그인 |
-|---|
-| ![](Image/01-login.gif) |
+<details>
+<summary><b>01. 서버 연결 후 로그인</b></summary>
 
-| 02. 캐릭터 생성 및 삭제 |
-|---|
-| ![](Image/02-character-create-delete.gif) |
+<br>
 
-| 03. 캐릭터 선택 및 인게임 |
-|---|
-| ![](Image/03-character-select-ingame.gif) |
+![](Image/01-login.gif)
 
-| 04. 재로그인 및 서버 끊김 처리 |
-|---|
-| ![](Image/04-relogin-server-disconnect.gif) |
+</details>
+
+<details>
+<summary><b>02. 캐릭터 생성 및 삭제</b></summary>
+
+<br>
+
+![](Image/02-character-create-delete.gif)
+
+</details>
+
+<details>
+<summary><b>03. 캐릭터 선택 및 인게임</b></summary>
+
+<br>
+
+![](Image/03-character-select-ingame.gif)
+
+</details>
+
+<details>
+<summary><b>04. 재로그인 및 서버 끊김 처리</b></summary>
+
+<br>
+
+![](Image/04-relogin-server-disconnect.gif)
+
+</details>
 
 <details>
 <summary><b>실행 관련 메모 펼치기/닫기</b></summary>
+
+<br>
 
 - 서버는 DB 비밀번호를 코드에 저장하지 않습니다.
 - 실행 시 DB 비밀번호를 콘솔 입력 또는 실행 인자로 전달합니다.
