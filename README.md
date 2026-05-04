@@ -173,9 +173,21 @@ equipment
 
 ## 🎥 동작 GIF
 
-| 캐릭터 선택 / 생성 흐름 |
+| 01. 서버 연결 후 로그인 |
 |---|
-| ![](Image/character-select.gif) |
+| ![](Image/01-login.gif) |
+
+| 02. 캐릭터 생성 및 삭제 |
+|---|
+| ![](Image/02-character-create-delete.gif) |
+
+| 03. 캐릭터 선택 및 인게임 |
+|---|
+| ![](Image/03-character-select-ingame.gif) |
+
+| 04. 재로그인 및 서버 끊김 처리 |
+|---|
+| ![](Image/04-relogin-server-disconnect.gif) |
 
 <details>
 <summary><b>실행 관련 메모 펼치기/닫기</b></summary>
