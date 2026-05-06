@@ -197,6 +197,8 @@ public sealed class ServerTextProtocol
         };
 
         character.QuickSlotSkillIds = ReadSkillIds(values);
+        character.Inventory = ReadInventoryItems(values);
+        character.Equipment = ReadEquipmentData(values);
         return character;
     }
 
@@ -254,6 +256,56 @@ public sealed class ServerTextProtocol
         return skillIds;
     }
 
+    /// 서버 CHARACTER 패킷의 inventory 토큰을 Unity 인벤토리 데이터로 복원합니다.
+    /// 형식은 itemUid:itemId:itemType:count:slotIndex:enhancement 목록이며 항목 구분은 세미콜론입니다.
+    private List<InventoryItemData> ReadInventoryItems(Dictionary<string, string> values)
+    {
+        List<InventoryItemData> items = new List<InventoryItemData>();
+        string rawInventory = ReadString(values, "inventory", string.Empty);
+        string[] entries = rawInventory.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (string entry in entries)
+        {
+            string[] parts = entry.Split(':');
+            if (parts.Length != 6)
+            {
+                continue;
+            }
+
+            items.Add(new InventoryItemData
+            {
+                ItemUid = ReadLong(parts[0]),
+                ItemId = ReadInt(parts[1]),
+                ItemType = (ItemType)ReadInt(parts[2]),
+                Count = ReadInt(parts[3]),
+                SlotIndex = ReadInt(parts[4]),
+                EnhancementLevel = ReadInt(parts[5])
+            });
+        }
+
+        return items;
+    }
+
+    /// 서버 CHARACTER 패킷의 equipment 토큰을 장비 슬롯 데이터로 복원합니다.
+    /// 장비는 슬롯 번호와 실제 소유 아이템 UID만 들고, 상세 정보는 Inventory에서 UID로 매칭합니다.
+    private EquipmentData ReadEquipmentData(Dictionary<string, string> values)
+    {
+        EquipmentData equipment = new EquipmentData();
+        string rawEquipment = ReadString(values, "equipment", string.Empty);
+        string[] entries = rawEquipment.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (string entry in entries)
+        {
+            string[] parts = entry.Split(':');
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+
+            equipment.Equip((EquipSlot)ReadInt(parts[0]), ReadLong(parts[1]));
+        }
+
+        return equipment;
+    }
+
     private string ReadString(Dictionary<string, string> values, string key, string fallback)
     {
         return values.TryGetValue(key, out string value) ? value : fallback;
@@ -291,6 +343,11 @@ public sealed class ServerTextProtocol
     private int ReadInt(string value, int fallback = 0)
     {
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result) ? result : fallback;
+    }
+
+    private long ReadLong(string value, long fallback = 0)
+    {
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long result) ? result : fallback;
     }
 
     private float ReadFloat(Dictionary<string, string> values, string key, float fallback = 0.0f)

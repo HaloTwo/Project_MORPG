@@ -12,6 +12,22 @@ enum class ClassType
     Rogue = 3
 };
 
+struct InventoryItemData
+{
+    std::int64_t itemUid = 0;
+    std::int32_t itemId = 0;
+    std::int32_t itemType = 0;
+    std::int32_t count = 0;
+    std::int32_t slotIndex = 0;
+    std::int32_t enhancementLevel = 0;
+};
+
+struct EquipmentEntryData
+{
+    std::int32_t equipSlot = 0;
+    std::int64_t itemUid = 0;
+};
+
 struct CharacterData
 {
     // DB characters.character_id
@@ -42,6 +58,12 @@ struct CharacterData
 
     // 1, 2, 3번 슬롯에 들어갈 스킬 ID 목록입니다.
     std::vector<std::int32_t> quickSlotSkillIds;
+
+    // DB inventory_items에서 로드한 캐릭터 소유 아이템 목록입니다.
+    std::vector<InventoryItemData> inventoryItems;
+
+    // DB equipment에서 로드한 장착 슬롯과 아이템 UID 목록입니다.
+    std::vector<EquipmentEntryData> equipmentItems;
 };
 
 inline const char* ToString(ClassType classType)

@@ -14,6 +14,11 @@ namespace
         return value == nullptr ? 0 : std::atoi(value);
     }
 
+    std::int64_t ToInt64(const char* value)
+    {
+        return value == nullptr ? 0 : std::strtoll(value, nullptr, 10);
+    }
+
     // DB에서 읽은 좌표값을 float으로 변환합니다.
     float ToFloat(const char* value)
     {
@@ -169,6 +174,8 @@ std::optional<CharacterData> MariaDbAccountRepository::FindCharacterById(std::in
     character.posY = ToFloat(row[10]);
     character.posZ = ToFloat(row[11]);
     character.quickSlotSkillIds = LoadSkillIds(connection.get(), character.characterId);
+    character.inventoryItems = LoadInventoryItems(connection.get(), character.characterId);
+    character.equipmentItems = LoadEquipmentItems(connection.get(), character.characterId);
     return character;
 }
 
@@ -246,6 +253,12 @@ std::optional<CharacterData> MariaDbAccountRepository::CreateCharacter(
             Execute(connection.get(), "ROLLBACK");
             return std::nullopt;
         }
+    }
+
+    if (!AddStarterItems(connection.get(), characterId, classType))
+    {
+        Execute(connection.get(), "ROLLBACK");
+        return std::nullopt;
     }
 
     Execute(connection.get(), "COMMIT");
@@ -378,6 +391,8 @@ std::vector<CharacterData> MariaDbAccountRepository::LoadCharacters(MYSQL* conne
     for (CharacterData& character : characters)
     {
         character.quickSlotSkillIds = LoadSkillIds(connection, character.characterId);
+        character.inventoryItems = LoadInventoryItems(connection, character.characterId);
+        character.equipmentItems = LoadEquipmentItems(connection, character.characterId);
     }
 
     return characters;
@@ -404,6 +419,103 @@ std::vector<std::int32_t> MariaDbAccountRepository::LoadSkillIds(MYSQL* connecti
     }
 
     return skillIds;
+}
+
+std::vector<InventoryItemData> MariaDbAccountRepository::LoadInventoryItems(MYSQL* connection, std::int32_t characterId) const
+{
+    // 인벤토리는 서버가 DB에서 다시 읽은 값만 클라이언트에 전달합니다.
+    // 클라이언트가 보낸 아이템 수량/슬롯 값은 나중에 요청 검증 단계에서만 참고해야 합니다.
+    std::ostringstream query;
+    query << "SELECT item_uid, item_id, item_type, count, slot_index, enhancement_level "
+          << "FROM inventory_items WHERE character_id = "
+          << characterId << " ORDER BY slot_index";
+
+    if (!Execute(connection, query.str()))
+    {
+        return {};
+    }
+
+    MysqlResult result = StoreResult(connection);
+    std::vector<InventoryItemData> items;
+    MYSQL_ROW row = nullptr;
+    while (result && (row = mysql_fetch_row(result.get())) != nullptr)
+    {
+        InventoryItemData item;
+        item.itemUid = ToInt64(row[0]);
+        item.itemId = ToInt(row[1]);
+        item.itemType = ToInt(row[2]);
+        item.count = ToInt(row[3]);
+        item.slotIndex = ToInt(row[4]);
+        item.enhancementLevel = ToInt(row[5]);
+        items.push_back(item);
+    }
+
+    return items;
+}
+
+std::vector<EquipmentEntryData> MariaDbAccountRepository::LoadEquipmentItems(MYSQL* connection, std::int32_t characterId) const
+{
+    // 장비 테이블은 어떤 슬롯에 어떤 소유 아이템 UID가 장착됐는지만 보관합니다.
+    // 아이템 상세 스탯은 item_master/inventory_items와 조인해서 확장할 수 있습니다.
+    std::ostringstream query;
+    query << "SELECT equip_slot, item_uid FROM equipment WHERE character_id = "
+          << characterId << " ORDER BY equip_slot";
+
+    if (!Execute(connection, query.str()))
+    {
+        return {};
+    }
+
+    MysqlResult result = StoreResult(connection);
+    std::vector<EquipmentEntryData> items;
+    MYSQL_ROW row = nullptr;
+    while (result && (row = mysql_fetch_row(result.get())) != nullptr)
+    {
+        EquipmentEntryData item;
+        item.equipSlot = ToInt(row[0]);
+        item.itemUid = ToInt64(row[1]);
+        items.push_back(item);
+    }
+
+    return items;
+}
+
+bool MariaDbAccountRepository::AddStarterItems(MYSQL* connection, std::int32_t characterId, ClassType classType) const
+{
+    // 포트폴리오 초기 단계에서는 직업별 기본 무기 1개와 공통 포션을 지급합니다.
+    // 실제 드랍/획득 시스템이 생기면 이 함수는 보상 서비스나 아이템 서비스로 분리하는 편이 좋습니다.
+    const std::int32_t weaponItemId =
+        classType == ClassType::Archer ? 1002 :
+        classType == ClassType::Rogue ? 1003 :
+        1001;
+
+    std::ostringstream insertWeapon;
+    insertWeapon << "INSERT INTO inventory_items "
+                 << "(character_id, item_id, item_type, count, slot_index, enhancement_level) VALUES ("
+                 << characterId << ", " << weaponItemId << ", 1, 1, 0, 0)";
+
+    if (!Execute(connection, insertWeapon.str()))
+    {
+        return false;
+    }
+
+    const std::int64_t weaponUid = static_cast<std::int64_t>(mysql_insert_id(connection));
+
+    std::ostringstream insertEquipment;
+    insertEquipment << "INSERT INTO equipment (character_id, equip_slot, item_uid) VALUES ("
+                    << characterId << ", 1, " << weaponUid << ")";
+
+    if (!Execute(connection, insertEquipment.str()))
+    {
+        return false;
+    }
+
+    std::ostringstream insertPotion;
+    insertPotion << "INSERT INTO inventory_items "
+                 << "(character_id, item_id, item_type, count, slot_index, enhancement_level) VALUES ("
+                 << characterId << ", 3001, 3, 5, 1, 0)";
+
+    return Execute(connection, insertPotion.str());
 }
 
 bool MariaDbAccountRepository::Execute(MYSQL* connection, const std::string& sql) const

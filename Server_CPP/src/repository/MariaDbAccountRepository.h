@@ -68,6 +68,15 @@ private:
     // 캐릭터의 퀵슬롯 스킬 ID 목록을 로드합니다.
     std::vector<std::int32_t> LoadSkillIds(MYSQL* connection, std::int32_t characterId) const;
 
+    // 캐릭터가 소유한 인벤토리 아이템을 슬롯 순서로 로드합니다.
+    std::vector<InventoryItemData> LoadInventoryItems(MYSQL* connection, std::int32_t characterId) const;
+
+    // 캐릭터가 장착 중인 아이템 UID를 장비 슬롯 순서로 로드합니다.
+    std::vector<EquipmentEntryData> LoadEquipmentItems(MYSQL* connection, std::int32_t characterId) const;
+
+    // 캐릭터 생성 직후 기본 지급 아이템과 기본 장착 정보를 같은 트랜잭션 안에서 추가합니다.
+    bool AddStarterItems(MYSQL* connection, std::int32_t characterId, ClassType classType) const;
+
     // SQL을 실행하고 실패 시 에러 로그를 출력합니다.
     bool Execute(MYSQL* connection, const std::string& sql) const;
 

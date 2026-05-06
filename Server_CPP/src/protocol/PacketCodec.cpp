@@ -108,7 +108,9 @@ std::string PacketCodec::EncodeCharacter(const CharacterData& character)
         << " level=" << character.level
         << " gold=" << character.gold
         << " pos=" << character.posX << "," << character.posY << "," << character.posZ
-        << " skills=" << JoinSkillIds(character.quickSlotSkillIds);
+        << " skills=" << JoinSkillIds(character.quickSlotSkillIds)
+        << " inventory=" << JoinInventoryItems(character.inventoryItems)
+        << " equipment=" << JoinEquipmentItems(character.equipmentItems);
     return stream.str();
 }
 
@@ -125,6 +127,48 @@ std::string PacketCodec::JoinSkillIds(const std::vector<std::int32_t>& skillIds)
         }
 
         stream << skillIds[i];
+    }
+
+    return stream.str();
+}
+
+std::string PacketCodec::JoinInventoryItems(const std::vector<InventoryItemData>& items)
+{
+    // itemUid:itemId:itemType:count:slotIndex:enhancement 형식입니다.
+    // 공백을 쓰지 않아 현재 텍스트 프로토콜의 key=value 파서와 충돌하지 않게 합니다.
+    std::ostringstream stream;
+    for (std::size_t i = 0; i < items.size(); ++i)
+    {
+        if (i > 0)
+        {
+            stream << ";";
+        }
+
+        const InventoryItemData& item = items[i];
+        stream << item.itemUid << ":"
+               << item.itemId << ":"
+               << item.itemType << ":"
+               << item.count << ":"
+               << item.slotIndex << ":"
+               << item.enhancementLevel;
+    }
+
+    return stream.str();
+}
+
+std::string PacketCodec::JoinEquipmentItems(const std::vector<EquipmentEntryData>& items)
+{
+    // equipSlot:itemUid 형식입니다. 실제 아이템 상세 정보는 inventory 토큰의 itemUid와 매칭합니다.
+    std::ostringstream stream;
+    for (std::size_t i = 0; i < items.size(); ++i)
+    {
+        if (i > 0)
+        {
+            stream << ";";
+        }
+
+        const EquipmentEntryData& item = items[i];
+        stream << item.equipSlot << ":" << item.itemUid;
     }
 
     return stream.str();

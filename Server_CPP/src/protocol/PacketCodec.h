@@ -56,4 +56,10 @@ private:
 
     // 스킬 ID 배열을 "1001,1002,1003" 같은 문자열로 합칩니다.
     static std::string JoinSkillIds(const std::vector<std::int32_t>& skillIds);
+
+    // 인벤토리 목록을 공백 없는 텍스트 토큰으로 직렬화합니다.
+    static std::string JoinInventoryItems(const std::vector<InventoryItemData>& items);
+
+    // 장착 슬롯 목록을 공백 없는 텍스트 토큰으로 직렬화합니다.
+    static std::string JoinEquipmentItems(const std::vector<EquipmentEntryData>& items);
 };
