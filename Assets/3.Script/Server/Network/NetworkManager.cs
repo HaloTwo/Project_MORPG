@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 
+using System;
+
 public sealed class NetworkManager : MonoBehaviour
 {
     private static NetworkManager instance;
@@ -47,6 +49,8 @@ public sealed class NetworkManager : MonoBehaviour
 
         instance = this;
         textProtocol = new ServerTextProtocol();
+        Application.runInBackground = true;
+        ApplyRuntimeConnectionConfig();
         DontDestroyOnLoad(gameObject);
     }
 
@@ -56,7 +60,7 @@ public sealed class NetworkManager : MonoBehaviour
         ShowServerDisconnectedPopupIfNeeded();
     }
 
-    public void Connect(string host = "127.0.0.1", int port = 7777)
+    public void Connect(string host = null, int port = 0)
     {
         string targetHost = string.IsNullOrWhiteSpace(host) ? serverHost : host;
         int targetPort = port <= 0 ? serverPort : port;
@@ -174,6 +178,47 @@ public sealed class NetworkManager : MonoBehaviour
     {
         applicationQuitting = true;
         Disconnect();
+    }
+
+    /// 실행 환경에 따라 서버 IP를 바꿀 수 있게 환경변수와 실행 인자를 적용합니다.
+    private void ApplyRuntimeConnectionConfig()
+    {
+        string environmentHost = Environment.GetEnvironmentVariable("MORPG_SERVER_HOST");
+        string argumentHost = ReadCommandLineValue("--serverHost");
+        string configuredHost = !string.IsNullOrWhiteSpace(argumentHost) ? argumentHost : environmentHost;
+        if (!string.IsNullOrWhiteSpace(configuredHost))
+        {
+            serverHost = configuredHost;
+        }
+
+        string environmentPort = Environment.GetEnvironmentVariable("MORPG_SERVER_PORT");
+        string argumentPort = ReadCommandLineValue("--serverPort");
+        string configuredPort = !string.IsNullOrWhiteSpace(argumentPort) ? argumentPort : environmentPort;
+        if (int.TryParse(configuredPort, out int parsedPort) && parsedPort > 0)
+        {
+            serverPort = parsedPort;
+        }
+    }
+
+    /// --serverHost 192.168.0.10 또는 --serverHost=192.168.0.10 형식을 모두 읽습니다.
+    private string ReadCommandLineValue(string key)
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i].Equals(key, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                return args[i + 1];
+            }
+
+            string prefix = key + "=";
+            if (args[i].StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i].Substring(prefix.Length);
+            }
+        }
+
+        return string.Empty;
     }
 }
 
