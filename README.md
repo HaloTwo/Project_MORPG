@@ -8,11 +8,14 @@
 >
 > 현재는 온라인 RPG의 가장 앞단인
 > **계정 → 캐릭터 슬롯 → 캐릭터 생성/삭제 → 게임 입장** 흐름을 먼저 구현했습니다.
+>
+> > AI 기반 개발 보조 도구를 활용해 반복 구현과 디버깅 시간을 줄이고,  
+> 서버-클라이언트-DB 연동 구조를 빠르게 검증하는 방식으로 개발하고 있습니다.
 
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
 - 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex, Unity MCP
-- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Runtime UI, URP Asset Pipeline, Prefab Collision Setup
+- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB
 
 ---
 
