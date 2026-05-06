@@ -22,6 +22,11 @@ public:
         const std::string& loginId,
         const std::string& password) = 0;
 
+    // 기존 평문 비밀번호 계정을 해시 저장 방식으로 전환할 때 사용합니다.
+    virtual bool UpdatePasswordHash(
+        const std::string& loginId,
+        const std::string& passwordHash) = 0;
+
     // 캐릭터 ID로 캐릭터 상세 정보와 스킬 슬롯 정보를 가져옵니다.
     virtual std::optional<CharacterData> FindCharacterById(std::int32_t characterId) = 0;
 
@@ -30,7 +35,8 @@ public:
     virtual std::optional<CharacterData> CreateCharacter(
         std::int32_t accountId,
         std::int32_t slotIndex,
-        ClassType classType) = 0;
+        ClassType classType,
+        const std::string& characterName) = 0;
 
     // 계정 소유 캐릭터인지 확인 가능한 조건으로 캐릭터를 삭제합니다.
     virtual bool DeleteCharacter(std::int32_t accountId, std::int32_t characterId) = 0;

@@ -91,5 +91,5 @@ CREATE TABLE IF NOT EXISTS equipment
 );
 
 INSERT INTO accounts (login_id, password_hash)
-VALUES ('test_user', '1234')
+VALUES ('test_user', '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4')
 ON DUPLICATE KEY UPDATE login_id = login_id;

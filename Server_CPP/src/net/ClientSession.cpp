@@ -143,7 +143,7 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     if (command.name == "CREATE_CHARACTER")
     {
-        if (command.args.size() < 3)
+        if (command.args.size() < 4)
         {
             SendLine(PacketCodec::EncodeCreateCharacterFail("InvalidCreateCharacterFormat"));
             return true;
@@ -152,7 +152,7 @@ bool ClientSession::HandleCommand(const std::string& line)
         const std::int32_t accountId = std::stoi(command.args[0]);
         const std::int32_t slotIndex = std::stoi(command.args[1]);
         const ClassType classType = ClassTypeFromString(command.args[2]);
-        SendLine(authService_->HandleCreateCharacter(accountId, slotIndex, classType));
+        SendLine(authService_->HandleCreateCharacter(accountId, slotIndex, classType, command.args[3]));
         return true;
     }
 

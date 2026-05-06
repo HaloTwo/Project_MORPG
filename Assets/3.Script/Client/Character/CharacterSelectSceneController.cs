@@ -8,6 +8,7 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     private Canvas canvas;
     private Text statusText;
     private readonly List<GameObject> slotObjects = new List<GameObject>();
+    private readonly Dictionary<int, InputField> characterNameInputs = new Dictionary<int, InputField>();
     private PacketDispatcher subscribedDispatcher;
 
     private void OnEnable()
@@ -67,6 +68,7 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
         }
 
         slotObjects.Clear();
+        characterNameInputs.Clear();
 
         for (int i = 0; i < 3; i++)
         {
@@ -102,21 +104,23 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     }
 
     /// <summary>
-    /// 빈 슬롯에는 캐릭터 생성 버튼 3개를 배치합니다.
-    /// 직업만 고르면 서버가 캐릭터 이름, 기본 위치, 장비, 스킬을 생성해 저장합니다.
+    /// 빈 슬롯에는 캐릭터 이름 입력창과 직업 생성 버튼 3개를 배치합니다.
+    /// 이름/직업을 고르면 서버가 슬롯 제한과 저장을 최종 검증합니다.
     /// </summary>
     private void BuildEmptySlot(RectTransform card, int slotIndex)
     {
         RuntimeUiFactory.CreateText(card, "EmptyTitle", $"빈 슬롯 {slotIndex + 1}", 29, TextAnchor.MiddleCenter, Color.white, new Vector2(0.0f, 0.76f), new Vector2(1.0f, 0.92f), Vector2.zero, Vector2.zero);
-        RuntimeUiFactory.CreateText(card, "EmptyInfo", "직업을 선택해\n캐릭터를 생성하세요.", 20, TextAnchor.MiddleCenter, new Color(0.78f, 0.86f, 0.92f, 1.0f), new Vector2(0.06f, 0.56f), new Vector2(0.94f, 0.74f), Vector2.zero, Vector2.zero);
+        RuntimeUiFactory.CreateText(card, "EmptyInfo", "이름을 입력하고\n직업을 선택하세요.", 20, TextAnchor.MiddleCenter, new Color(0.78f, 0.86f, 0.92f, 1.0f), new Vector2(0.06f, 0.58f), new Vector2(0.94f, 0.74f), Vector2.zero, Vector2.zero);
+        InputField nameInput = RuntimeUiFactory.CreateInputField(card, "CharacterNameInput", "캐릭터 이름", false, new Vector2(0.12f, 0.48f), new Vector2(0.88f, 0.57f), Vector2.zero, Vector2.zero);
+        characterNameInputs[slotIndex] = nameInput;
 
-        Button warriorButton = RuntimeUiFactory.CreateButton(card, "CreateWarriorButton", "전사", new Vector2(0.16f, 0.36f), new Vector2(0.84f, 0.48f), Vector2.zero, Vector2.zero);
+        Button warriorButton = RuntimeUiFactory.CreateButton(card, "CreateWarriorButton", "전사", new Vector2(0.16f, 0.33f), new Vector2(0.84f, 0.45f), Vector2.zero, Vector2.zero);
         warriorButton.onClick.AddListener(() => RequestCreateCharacter(slotIndex, ClassType.Warrior));
 
-        Button archerButton = RuntimeUiFactory.CreateButton(card, "CreateArcherButton", "궁수", new Vector2(0.16f, 0.22f), new Vector2(0.84f, 0.34f), Vector2.zero, Vector2.zero);
+        Button archerButton = RuntimeUiFactory.CreateButton(card, "CreateArcherButton", "궁수", new Vector2(0.16f, 0.19f), new Vector2(0.84f, 0.31f), Vector2.zero, Vector2.zero);
         archerButton.onClick.AddListener(() => RequestCreateCharacter(slotIndex, ClassType.Archer));
 
-        Button rogueButton = RuntimeUiFactory.CreateButton(card, "CreateRogueButton", "도적", new Vector2(0.16f, 0.08f), new Vector2(0.84f, 0.20f), Vector2.zero, Vector2.zero);
+        Button rogueButton = RuntimeUiFactory.CreateButton(card, "CreateRogueButton", "도적", new Vector2(0.16f, 0.05f), new Vector2(0.84f, 0.17f), Vector2.zero, Vector2.zero);
         rogueButton.onClick.AddListener(() => RequestCreateCharacter(slotIndex, ClassType.Rogue));
     }
 
@@ -144,8 +148,47 @@ public sealed class CharacterSelectSceneController : MonoBehaviour
     /// </summary>
     private void RequestCreateCharacter(int slotIndex, ClassType classType)
     {
-        SetStatus($"{GetClassNameKr(classType)} 캐릭터 생성 요청 중...");
-        NetworkManager.Instance.SendPacket(new CreateCharacterRequestPacket(CharacterSession.Instance.AccountId, slotIndex, classType));
+        string characterName = GetRequestedCharacterName(slotIndex);
+        if (!ValidateCharacterName(characterName))
+        {
+            return;
+        }
+
+        SetStatus($"{characterName} 생성 요청 중...");
+        NetworkManager.Instance.SendPacket(new CreateCharacterRequestPacket(CharacterSession.Instance.AccountId, slotIndex, classType, characterName));
+    }
+
+    /// 슬롯별 이름 입력창에서 서버로 보낼 캐릭터 이름을 가져옵니다.
+    private string GetRequestedCharacterName(int slotIndex)
+    {
+        return characterNameInputs.TryGetValue(slotIndex, out InputField inputField) && inputField != null ? inputField.text.Trim() : string.Empty;
+    }
+
+    /// 현재 텍스트 프로토콜은 공백 기준으로 명령을 분리하므로 캐릭터 이름에는 공백을 허용하지 않습니다.
+    private bool ValidateCharacterName(string characterName)
+    {
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            SetStatus("캐릭터 이름을 입력하세요.");
+            return false;
+        }
+
+        if (characterName.Length < 2 || characterName.Length > 12)
+        {
+            SetStatus("캐릭터 이름은 2~12자로 입력하세요.");
+            return false;
+        }
+
+        for (int i = 0; i < characterName.Length; i++)
+        {
+            if (char.IsWhiteSpace(characterName[i]))
+            {
+                SetStatus("캐릭터 이름에는 공백을 사용할 수 없습니다.");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

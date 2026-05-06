@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -48,6 +49,7 @@ public sealed class LoginSceneController : MonoBehaviour
         }
 
         WireUiEvents();
+        FocusInput(loginIdInput);
     }
 
     /// <summary>
@@ -119,6 +121,11 @@ public sealed class LoginSceneController : MonoBehaviour
             registerCancelButton.onClick.RemoveListener(HideRegisterDialog);
             registerCancelButton.onClick.AddListener(HideRegisterDialog);
         }
+
+        AttachInputHandler(loginIdInput, () => FocusInput(passwordInput), () => FocusInput(passwordInput));
+        AttachInputHandler(passwordInput, RequestLogin, () => FocusInput(loginIdInput));
+        AttachInputHandler(registerIdInput, () => FocusInput(registerPasswordInput), () => FocusInput(registerPasswordInput), HideRegisterDialog);
+        AttachInputHandler(registerPasswordInput, RequestRegister, () => FocusInput(registerIdInput), HideRegisterDialog);
     }
 
     /// <summary>
@@ -273,6 +280,7 @@ public sealed class LoginSceneController : MonoBehaviour
         if (registerDialog != null)
         {
             registerDialog.SetActive(true);
+            FocusInput(registerIdInput);
             return;
         }
 
@@ -291,6 +299,10 @@ public sealed class LoginSceneController : MonoBehaviour
 
         registerCancelButton = RuntimeUiFactory.CreateButton(panel, "CancelButton", "취소", new Vector2(0.52f, 0.13f), new Vector2(0.88f, 0.25f), Vector2.zero, Vector2.zero);
         registerCancelButton.onClick.AddListener(HideRegisterDialog);
+
+        AttachInputHandler(registerIdInput, () => FocusInput(registerPasswordInput), () => FocusInput(registerPasswordInput), HideRegisterDialog);
+        AttachInputHandler(registerPasswordInput, RequestRegister, () => FocusInput(registerIdInput), HideRegisterDialog);
+        FocusInput(registerIdInput);
     }
 
     /// 회원가입 팝업을 닫고 임시 입력 참조를 정리합니다.
@@ -300,6 +312,37 @@ public sealed class LoginSceneController : MonoBehaviour
         {
             registerDialog.SetActive(false);
         }
+
+        FocusInput(loginIdInput);
+    }
+
+    /// 생성된 InputField에 폼 키 입력 핸들러를 붙입니다.
+    private void AttachInputHandler(InputField inputField, System.Action onSubmit, System.Action onTab, System.Action onCancel = null)
+    {
+        if (inputField == null)
+        {
+            return;
+        }
+
+        RuntimeFormInputHandler handler = inputField.GetComponent<RuntimeFormInputHandler>();
+        if (handler == null)
+        {
+            handler = inputField.gameObject.AddComponent<RuntimeFormInputHandler>();
+        }
+
+        handler.Initialize(onSubmit, onTab, onCancel);
+    }
+
+    /// 지정한 입력창을 선택하고 바로 타이핑 가능한 상태로 만듭니다.
+    private void FocusInput(InputField inputField)
+    {
+        if (inputField == null || !inputField.gameObject.activeInHierarchy)
+        {
+            return;
+        }
+
+        EventSystem.current?.SetSelectedGameObject(inputField.gameObject);
+        inputField.ActivateInputField();
     }
 
     /// 서버 내부 메시지를 일반 사용자가 이해할 수 있는 문장으로 바꿔 UI에 표시합니다.

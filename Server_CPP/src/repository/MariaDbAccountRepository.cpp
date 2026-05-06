@@ -103,6 +103,32 @@ std::optional<AccountData> MariaDbAccountRepository::RegisterAccount(
     return LoadAccountByLogin(connection.get(), normalizedLoginId);
 }
 
+bool MariaDbAccountRepository::UpdatePasswordHash(
+    const std::string& loginId,
+    const std::string& passwordHash)
+{
+    MysqlHandle connection = Connect();
+    if (!connection)
+    {
+        return false;
+    }
+
+    const std::string normalizedLoginId = NormalizeLoginId(loginId);
+    std::ostringstream query;
+    query << "UPDATE accounts SET password_hash = '"
+          << Escape(connection.get(), passwordHash)
+          << "' WHERE login_id = '"
+          << Escape(connection.get(), normalizedLoginId)
+          << "' LIMIT 1";
+
+    if (!Execute(connection.get(), query.str()))
+    {
+        return false;
+    }
+
+    return mysql_affected_rows(connection.get()) == 1;
+}
+
 std::optional<CharacterData> MariaDbAccountRepository::FindCharacterById(std::int32_t characterId)
 {
     // 게임 입장 시 선택한 캐릭터의 상세 정보를 다시 조회합니다.
@@ -149,11 +175,12 @@ std::optional<CharacterData> MariaDbAccountRepository::FindCharacterById(std::in
 std::optional<CharacterData> MariaDbAccountRepository::CreateCharacter(
     std::int32_t accountId,
     std::int32_t slotIndex,
-    ClassType classType)
+    ClassType classType,
+    const std::string& characterName)
 {
     // 캐릭터 생성 요청 처리:
     // 슬롯 범위와 직업 유효성을 먼저 확인합니다.
-    if (slotIndex < 0 || slotIndex >= 3 || classType == ClassType::None)
+    if (slotIndex < 0 || slotIndex >= 3 || classType == ClassType::None || !IsValidCharacterName(characterName))
     {
         return std::nullopt;
     }
@@ -185,17 +212,15 @@ std::optional<CharacterData> MariaDbAccountRepository::CreateCharacter(
         return std::nullopt;
     }
 
-    // 현재는 직업/슬롯 기준으로 임시 이름과 시작 위치를 정합니다.
-    // 나중에 클라이언트에서 이름 입력을 받게 되면 이 부분을 교체하면 됩니다.
+    // 클라이언트가 보낸 이름을 저장하되, 슬롯/직업/개수 제한은 서버와 DB에서 다시 검증합니다.
     const float x = slotIndex == 0 ? -2.0f : slotIndex == 1 ? 0.0f : 2.0f;
-    const std::string name = BuildCharacterName(classType, slotIndex);
 
     std::ostringstream insertCharacter;
     insertCharacter << "INSERT INTO characters "
                     << "(account_id, slot_index, name, class_type, level, exp, gold, current_map_id, pos_x, pos_y, pos_z) VALUES ("
                     << accountId << ", "
                     << slotIndex << ", '"
-                    << Escape(connection.get(), name) << "', "
+                    << Escape(connection.get(), characterName) << "', "
                     << static_cast<int>(classType) << ", 1, 0, 100, 1, "
                     << x << ", 1.0, 0.0)";
 
@@ -429,10 +454,17 @@ std::string MariaDbAccountRepository::NormalizeLoginId(const std::string& loginI
     return normalized;
 }
 
-std::string MariaDbAccountRepository::BuildCharacterName(ClassType classType, std::int32_t slotIndex) const
+bool MariaDbAccountRepository::IsValidCharacterName(const std::string& characterName) const
 {
-    // 현재는 캐릭터 이름 입력 UI가 없으므로 임시 이름을 서버에서 생성합니다.
-    return std::string(ToString(classType)) + "_" + std::to_string(slotIndex + 1);
+    if (characterName.size() < 2 || characterName.size() > 96)
+    {
+        return false;
+    }
+
+    return std::none_of(characterName.begin(), characterName.end(), [](unsigned char ch)
+    {
+        return std::isspace(ch);
+    });
 }
 
 std::vector<std::int32_t> MariaDbAccountRepository::GetDefaultSkillIds(ClassType classType) const

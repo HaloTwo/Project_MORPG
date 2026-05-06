@@ -15,7 +15,7 @@
 - 개발 인원: 1인
 - 개발 기간: 2026.05.01 ~ 진행 중
 - 개발 환경: Unity 6, C#, C++17, Winsock, MariaDB, DBeaver, GitHub, Codex, Unity MCP
-- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB
+- 주요 기술: TCP Socket, Server-Driven Flow, Packet Dispatcher, Repository Pattern, MariaDB, Password Hashing
 
 ---
 
@@ -45,18 +45,22 @@ Unity는 서버에 요청만 보내고,
 
 - 로그인: 아이디 + 비밀번호 검증
 - 회원가입: 별도 회원가입 팝업 UI에서 신규 계정 생성
+- 비밀번호는 서버에서 SHA-256 해시로 변환 후 `accounts.password_hash`에 저장
+- 기존 평문 테스트 계정은 로그인 성공 시 해시 값으로 자동 전환
 - 중복 아이디 방지: `accounts.login_id` UNIQUE 제약
 - 로그인 실패 시 사용자용 메시지 표시
 - 서버 미실행 또는 연결 끊김 시 종료 팝업 처리
 
 > 계정 검증은 Unity가 아니라 C++ 서버의 `AuthService`와 `MariaDbAccountRepository`가 담당합니다.
 > Unity는 입력값을 패킷으로 보내고, 서버 응답에 따라 화면만 전환합니다.
+> 현재 해시는 학습용 SHA-256 단계이며, 운영 수준에서는 salt 기반 PBKDF2 / bcrypt / Argon2로 확장할 예정입니다.
 
 ## 👤 캐릭터 슬롯 시스템
 
 - 계정당 최대 3개의 캐릭터 슬롯 제공
-- 빈 슬롯에서 Warrior / Archer / Rogue 생성
+- 빈 슬롯에서 캐릭터 이름 입력 후 Warrior / Archer / Rogue 생성
 - 캐릭터 생성 시 서버가 DB에 저장
+- 캐릭터 이름은 클라이언트와 서버 양쪽에서 빈 값, 길이, 공백 사용 여부 검증
 - 캐릭터 삭제 시 서버가 계정 소유 여부를 확인한 뒤 DB에서 삭제
 - 삭제 후에도 슬롯 번호가 밀리지 않도록 `slot_index` 기준으로 UI 표시
 - 게임 씬에서 캐릭터 선택창으로 돌아가기 지원
@@ -93,12 +97,13 @@ LoginScene / CharacterSelectScene
 - 캐릭터 입장 후 서버 세션 기준으로 원격 플레이어 Spawn 처리
 - `MOVE`, `STOP`, `SPAWN`, `DESPAWN` 패킷을 서버가 다른 클라이언트에 브로드캐스트
 - 클라이언트는 원격 플레이어를 별도 컨트롤러로 생성하고 위치를 보간
+- 원격 플레이어는 스냅샷 기반 보간 버퍼로 위치를 보정
 - `ENTER_GAME` 이후 GameScene 전환 중 TCP 연결이 끊기지 않도록 `NetworkManager` 연결 생명주기 정리
 - Spawn 패킷을 놓친 경우에도 Move 패킷 기준으로 원격 플레이어를 복구 생성
 - 인게임 채팅창 UI와 채팅 메시지 송수신 흐름을 추가해 MORPG 기본 커뮤니케이션 구조 확장
 
 > 현재는 포트폴리오 검증을 위한 실시간 동기화 1차 단계입니다.
-> 이후에는 서버 Tick, 이동 검증, 위치 보정, 보간 버퍼를 추가해 실제 온라인 RPG 구조에 가깝게 확장할 예정입니다.
+> 이후에는 서버 Tick 기반 브로드캐스트와 이동 검증을 추가해 실제 온라인 RPG 구조에 가깝게 확장할 예정입니다.
 
 ---
 
@@ -112,8 +117,8 @@ inventory_items
 equipment
 ```
 
-- `accounts`: 로그인 계정 저장
-- `characters`: 계정별 캐릭터 슬롯, 직업, 레벨, 위치 저장
+- `accounts`: 로그인 계정과 비밀번호 해시 저장
+- `characters`: 계정별 캐릭터 이름, 슬롯, 직업, 레벨, 위치 저장
 - `character_skills`: 직업별 기본 스킬 슬롯 저장
 - `inventory_items`, `equipment`: 이후 인벤토리/장비 확장을 위한 기본 테이블
 
@@ -121,6 +126,7 @@ equipment
 <summary><b>DB 제약 설계 펼치기/닫기</b></summary>
 
 - `accounts.login_id`는 UNIQUE로 중복 회원가입을 방지합니다.
+- `accounts.password_hash`에는 서버에서 계산한 해시 문자열을 저장합니다.
 - `characters(account_id, slot_index)`는 UNIQUE로 같은 계정의 같은 슬롯 중복 생성을 막습니다.
 - `slot_index`는 0~2만 허용해 계정당 3칸 구조를 DB에서도 보장합니다.
 - 캐릭터 삭제 시 관련 스킬/인벤토리/장비 데이터가 함께 정리되도록 FK Cascade를 사용합니다.
@@ -204,6 +210,21 @@ equipment
 
 </details>
 
+<details>
+<summary><b>6일차 - 계정 보안 흐름과 캐릭터 생성 UX 개선</b></summary>
+
+- 캐릭터 생성 시 이름 입력창을 추가하고, 직업 선택과 함께 서버로 전송
+- 클라이언트에서 캐릭터 이름 빈 값, 길이, 공백 사용 여부를 1차 검증
+- 서버 Repository에서 동일한 이름 규칙을 다시 검증해 클라이언트 값을 그대로 신뢰하지 않도록 처리
+- 회원가입 비밀번호를 서버에서 SHA-256 해시로 변환해 `accounts.password_hash`에 저장
+- 기존 평문 테스트 계정은 첫 로그인 성공 시 해시 값으로 자동 전환되도록 마이그레이션 흐름 추가
+- 로그인/회원가입/채팅 입력창에 Enter, Tab 기반 폼 입력 흐름 추가
+
+> 이번 단계에서는 “사용자가 보는 생성 UX”와 “DB에 저장되는 인증 데이터”를 동시에 정리했습니다.
+> 아직 운영급 비밀번호 저장 구조는 아니지만, 평문 저장을 제거하고 이후 salt 기반 해시로 확장할 수 있는 위치를 분리했습니다.
+
+</details>
+
 ---
 
 ## ✅ 현재 동작 흐름
@@ -212,15 +233,16 @@ equipment
 1. 서버 실행
 2. Unity LoginScene 실행
 3. 로그인 또는 회원가입 요청
-4. 서버가 MariaDB에서 계정 검증/생성
+4. 서버가 비밀번호를 해시 처리한 뒤 MariaDB에서 계정 검증/생성
 5. 캐릭터 목록 수신
 6. CharacterSelectScene에서 3슬롯 표시
-7. 빈 슬롯에서 캐릭터 생성
-8. 생성된 캐릭터 입장 또는 삭제
-9. GameScene 입장 후 쿼터뷰 맵에서 조이스틱 이동
-10. 캐릭터 선택창으로 복귀 가능
-11. 두 클라이언트 접속 시 원격 플레이어 Spawn / Move / Stop 동기화
-12. 인게임 채팅창을 통한 기본 채팅 UI 흐름 확인
+7. 빈 슬롯에서 캐릭터 이름 입력 후 직업 선택
+8. 서버가 이름/슬롯/직업/최대 3개 제한을 검증하고 DB 저장
+9. 생성된 캐릭터 입장 또는 삭제
+10. GameScene 입장 후 쿼터뷰 맵에서 조이스틱 이동
+11. 캐릭터 선택창으로 복귀 가능
+12. 두 클라이언트 접속 시 원격 플레이어 Spawn / Move / Stop 동기화
+13. 인게임 채팅창을 통한 TCP 채팅 송수신 확인
 ```
 
 ## 🎥 동작 GIF
@@ -297,8 +319,6 @@ equipment
 
 ## 🚀 다음 개발 예정
 
-- 캐릭터 이름 입력 기능
-- 비밀번호 해시 저장
 - 인벤토리 획득 / 사용 / 장착 구조
 - 장비 스탯 반영
 - 몬스터 Spawn / AI / 전투 타겟팅
@@ -306,7 +326,7 @@ equipment
 - HP / 데미지 계산 서버 처리
 - 이동 패킷 검증
 - 서버 Tick 기반 이동 브로드캐스트 정리
-- 원격 플레이어 보간 버퍼 및 위치 보정
 - NavMesh 기반 이동 가능 영역 정리
 - 맵 오브젝트별 충돌 박스 세밀 조정
 - Blocking TCP 서버를 IOCP 기반 구조로 개선
+- 비밀번호 해시를 salt 기반 PBKDF2 / bcrypt / Argon2 구조로 개선

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -201,6 +202,7 @@ public sealed class GameHudController : MonoBehaviour
 
         chatLogText = RuntimeUiFactory.CreateText(chatWindowPanel, "ChatLog", "[시스템] GameScene 입장\n[시스템] 채팅 서버 패킷 연결됨", 18, TextAnchor.UpperLeft, new Color(0.86f, 0.90f, 0.92f, 1.0f), new Vector2(0.05f, 0.28f), new Vector2(0.95f, 0.80f), Vector2.zero, Vector2.zero);
         chatInputField = RuntimeUiFactory.CreateInputField(chatWindowPanel, "ChatInput", "메시지 입력", false, new Vector2(0.05f, 0.06f), new Vector2(0.72f, 0.22f), Vector2.zero, Vector2.zero);
+        AttachChatInputHandler();
         Button sendButton = RuntimeUiFactory.CreateButton(chatWindowPanel, "SendButton", "전송", new Vector2(0.74f, 0.06f), new Vector2(0.95f, 0.22f), Vector2.zero, Vector2.zero);
         sendButton.onClick.AddListener(SendChatMessage);
 
@@ -367,6 +369,7 @@ public sealed class GameHudController : MonoBehaviour
         AppendChatLine(sender, message);
         chatInputField.text = string.Empty;
         NetworkManager.Instance.SendPacket(new ChatPacket(actorId, sender, message));
+        FocusChatInput();
     }
 
     /// 서버에서 받은 다른 플레이어 채팅을 현재 HUD에 반영합니다.
@@ -402,6 +405,35 @@ public sealed class GameHudController : MonoBehaviour
         }
 
         chatLogText.text = string.Join("\n", chatLines);
+    }
+
+    /// 채팅 입력창이 선택된 동안 Enter를 누르면 전송합니다.
+    private void AttachChatInputHandler()
+    {
+        if (chatInputField == null)
+        {
+            return;
+        }
+
+        RuntimeFormInputHandler handler = chatInputField.GetComponent<RuntimeFormInputHandler>();
+        if (handler == null)
+        {
+            handler = chatInputField.gameObject.AddComponent<RuntimeFormInputHandler>();
+        }
+
+        handler.Initialize(SendChatMessage, null);
+    }
+
+    /// 전송 후 바로 다음 메시지를 칠 수 있도록 채팅 입력 포커스를 유지합니다.
+    private void FocusChatInput()
+    {
+        if (chatInputField == null || !chatInputField.gameObject.activeInHierarchy)
+        {
+            return;
+        }
+
+        EventSystem.current?.SetSelectedGameObject(chatInputField.gameObject);
+        chatInputField.ActivateInputField();
     }
 
     /// GameScene HUD가 살아있는 동안만 네트워크 이벤트를 받아 MissingReference를 방지합니다.

@@ -20,7 +20,7 @@ public sealed class ServerTextProtocol
             case RegisterRequestPacket register:
                 return $"REGISTER {register.LoginId} {register.Password}";
             case CreateCharacterRequestPacket create:
-                return $"CREATE_CHARACTER {create.AccountId} {create.SlotIndex} {create.ClassType}";
+                return $"CREATE_CHARACTER {create.AccountId} {create.SlotIndex} {create.ClassType} {create.CharacterName}";
             case DeleteCharacterRequestPacket delete:
                 return $"DELETE_CHARACTER {delete.AccountId} {delete.CharacterId}";
             case EnterGameRequestPacket enter:

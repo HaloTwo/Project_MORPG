@@ -32,12 +32,17 @@ public:
         const std::string& loginId,
         const std::string& password) override;
 
+    bool UpdatePasswordHash(
+        const std::string& loginId,
+        const std::string& passwordHash) override;
+
     std::optional<CharacterData> FindCharacterById(std::int32_t characterId) override;
 
     std::optional<CharacterData> CreateCharacter(
         std::int32_t accountId,
         std::int32_t slotIndex,
-        ClassType classType) override;
+        ClassType classType,
+        const std::string& characterName) override;
 
     bool DeleteCharacter(std::int32_t accountId, std::int32_t characterId) override;
 
@@ -72,8 +77,8 @@ private:
     // 로그인 ID 앞뒤 공백 제거 및 소문자 변환을 수행합니다.
     std::string NormalizeLoginId(const std::string& loginId) const;
 
-    // 임시 캐릭터 이름을 직업/슬롯 기반으로 생성합니다.
-    std::string BuildCharacterName(ClassType classType, std::int32_t slotIndex) const;
+    // 클라이언트에서 받은 캐릭터 이름의 길이와 공백 사용 여부를 검사합니다.
+    bool IsValidCharacterName(const std::string& characterName) const;
 
     // 직업별 기본 스킬 3개를 반환합니다.
     std::vector<std::int32_t> GetDefaultSkillIds(ClassType classType) const;
