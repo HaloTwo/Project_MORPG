@@ -12,7 +12,7 @@ public sealed class QuarterViewPlayerController : MonoBehaviour
     [SerializeField] private float moveSpeed = 6.0f;
     [SerializeField] private float rotationSpeed = 16.0f;
     [SerializeField] private bool sendMovementPackets = true;
-    [SerializeField] private float movePacketInterval = 0.12f;
+    [SerializeField] private float movePacketInterval = 0.06f;
     [SerializeField] private float inputDeadZone = 0.12f;
 
     private CharacterController characterController;

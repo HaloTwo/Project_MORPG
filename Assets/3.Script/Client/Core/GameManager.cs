@@ -44,6 +44,7 @@ public sealed class GameManager : MonoBehaviour
         PrepareLocalPlayer();
         NetworkManager.Instance.Connect();
         ApplySelectedCharacterIfExists();
+        RestoreKnownRemotePlayers();
         PrepareDemoCombatDummies();
     }
 
@@ -267,6 +268,27 @@ public sealed class GameManager : MonoBehaviour
         }
     }
 
+    /// GameScene 로딩 중 먼저 도착한 원격 플레이어 생성 정보를 씬 시작 시 복원합니다.
+    private void RestoreKnownRemotePlayers()
+    {
+        List<SpawnPacket> knownSpawns = NetworkManager.Instance.Dispatcher.GetKnownRemoteSpawns();
+        for (int i = 0; i < knownSpawns.Count; i++)
+        {
+            SpawnPacket packet = knownSpawns[i];
+            if (packet.EntityType != "Player")
+            {
+                continue;
+            }
+
+            if (localPlayer != null && packet.ActorId == localPlayer.ActorId)
+            {
+                continue;
+            }
+
+            SpawnRemotePlayer(packet.ActorId, packet.Position, packet.Yaw);
+        }
+    }
+
     // PacketDispatcher에서 전달된 원격 플레이어 이동 패킷을 받아 처리합니다.
     private void HandleMove(MovePacket packet)
     {
@@ -283,7 +305,7 @@ public sealed class GameManager : MonoBehaviour
 
         if (remotePlayer != null)
         {
-            remotePlayer.SetTargetPosition(packet.Position, packet.Yaw);
+            remotePlayer.SetMoveTarget(packet.Position, packet.Direction, packet.Yaw, packet.MoveSpeed);
         }
     }
 
@@ -303,7 +325,7 @@ public sealed class GameManager : MonoBehaviour
 
         if (remotePlayer != null)
         {
-            remotePlayer.SetTargetPosition(packet.Position, packet.Yaw);
+            remotePlayer.SetStopTarget(packet.Position, packet.Yaw);
         }
     }
 

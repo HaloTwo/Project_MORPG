@@ -1,5 +1,6 @@
 ﻿using System;
 using UnityEngine;
+using System.Collections.Generic;
 
 public sealed class PacketDispatcher
 {
@@ -15,6 +16,14 @@ public sealed class PacketDispatcher
     public event Action<DespawnPacket> DespawnReceived;
     public event Action<DamagePacket> DamageReceived;
     public event Action<SkillPacket> SkillReceived;
+
+    private readonly Dictionary<int, SpawnPacket> knownRemoteSpawns = new Dictionary<int, SpawnPacket>();
+
+    /// 씬 로딩 중 먼저 도착한 SPAWN을 GameScene 시작 시 복원할 수 있게 제공합니다.
+    public List<SpawnPacket> GetKnownRemoteSpawns()
+    {
+        return new List<SpawnPacket>(knownRemoteSpawns.Values);
+    }
 
     // 패킷 ID를 기준으로 어떤 처리 함수로 보낼지 분기합니다.
     public void Dispatch(PacketBase packet)
@@ -119,6 +128,7 @@ public sealed class PacketDispatcher
     // 서버 또는 로컬 시뮬레이션에서 받은 이동 동기화 패킷을 처리합니다.
     private void HandleMove(MovePacket packet)
     {
+        knownRemoteSpawns[packet.ActorId] = new SpawnPacket(packet.ActorId, "Player", packet.Position, packet.Yaw);
         Debug.Log($"[PacketDispatcher] Move actor={packet.ActorId} pos={packet.Position} yaw={packet.Yaw}");
         MoveReceived?.Invoke(packet);
     }
@@ -126,6 +136,7 @@ public sealed class PacketDispatcher
     // 서버 또는 로컬 시뮬레이션에서 받은 정지 패킷을 처리합니다.
     private void HandleStop(StopPacket packet)
     {
+        knownRemoteSpawns[packet.ActorId] = new SpawnPacket(packet.ActorId, "Player", packet.Position, packet.Yaw);
         Debug.Log($"[PacketDispatcher] Stop actor={packet.ActorId} pos={packet.Position} yaw={packet.Yaw}");
         StopReceived?.Invoke(packet);
     }
@@ -133,12 +144,14 @@ public sealed class PacketDispatcher
     // 원격 플레이어 같은 다른 엔티티 생성 패킷을 처리합니다.
     private void HandleSpawn(SpawnPacket packet)
     {
+        knownRemoteSpawns[packet.ActorId] = packet;
         Debug.Log($"[PacketDispatcher] Spawn actor={packet.ActorId} type={packet.EntityType}");
         SpawnReceived?.Invoke(packet);
     }
 
     private void HandleDespawn(DespawnPacket packet)
     {
+        knownRemoteSpawns.Remove(packet.ActorId);
         Debug.Log($"[PacketDispatcher] Despawn actor={packet.ActorId}");
         DespawnReceived?.Invoke(packet);
     }
