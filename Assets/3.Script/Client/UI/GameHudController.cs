@@ -18,6 +18,8 @@ public sealed class GameHudController : MonoBehaviour
     private RectTransform equipmentPanel;
     private RectTransform chatWindowPanel;
     private SkillController observedSkillController;
+    private PacketDispatcher subscribedDispatcher;
+    private readonly List<string> chatLines = new List<string>();
     private float bindRetryTimer;
     private float combatBannerTimer;
 
@@ -28,6 +30,7 @@ public sealed class GameHudController : MonoBehaviour
         RefreshInventoryPanel();
         RefreshEquipmentPanel();
         BindLocalPlayerSkillController();
+        SubscribeNetworkEvents();
     }
 
     private void Update()
@@ -47,6 +50,7 @@ public sealed class GameHudController : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnsubscribeNetworkEvents();
         UnbindLocalPlayerSkillController();
     }
 
@@ -195,10 +199,10 @@ public sealed class GameHudController : MonoBehaviour
         Button closeButton = RuntimeUiFactory.CreateButton(chatWindowPanel, "CloseButton", "X", new Vector2(0.84f, 0.86f), new Vector2(0.96f, 0.98f), Vector2.zero, Vector2.zero);
         closeButton.onClick.AddListener(ToggleChatWindow);
 
-        chatLogText = RuntimeUiFactory.CreateText(chatWindowPanel, "ChatLog", "[시스템] GameScene 입장\n[시스템] 채팅 서버 패킷 연결 예정", 18, TextAnchor.UpperLeft, new Color(0.86f, 0.90f, 0.92f, 1.0f), new Vector2(0.05f, 0.28f), new Vector2(0.95f, 0.80f), Vector2.zero, Vector2.zero);
+        chatLogText = RuntimeUiFactory.CreateText(chatWindowPanel, "ChatLog", "[시스템] GameScene 입장\n[시스템] 채팅 서버 패킷 연결됨", 18, TextAnchor.UpperLeft, new Color(0.86f, 0.90f, 0.92f, 1.0f), new Vector2(0.05f, 0.28f), new Vector2(0.95f, 0.80f), Vector2.zero, Vector2.zero);
         chatInputField = RuntimeUiFactory.CreateInputField(chatWindowPanel, "ChatInput", "메시지 입력", false, new Vector2(0.05f, 0.06f), new Vector2(0.72f, 0.22f), Vector2.zero, Vector2.zero);
         Button sendButton = RuntimeUiFactory.CreateButton(chatWindowPanel, "SendButton", "전송", new Vector2(0.74f, 0.06f), new Vector2(0.95f, 0.22f), Vector2.zero, Vector2.zero);
-        sendButton.onClick.AddListener(SendLocalChatMessage);
+        sendButton.onClick.AddListener(SendChatMessage);
 
         chatWindowPanel.gameObject.SetActive(false);
     }
@@ -343,8 +347,8 @@ public sealed class GameHudController : MonoBehaviour
         }
     }
 
-    // 현재는 로컬 채팅 로그에만 추가합니다. 나중에 ChatPacket을 만들면 이 함수에서 SendPacket으로 교체합니다.
-    private void SendLocalChatMessage()
+    /// 채팅 전송 버튼에서 호출됩니다. 로컬 HUD에 먼저 표시하고 서버에는 다른 클라이언트 브로드캐스트용 패킷을 보냅니다.
+    private void SendChatMessage()
     {
         if (chatInputField == null || chatLogText == null)
         {
@@ -359,8 +363,70 @@ public sealed class GameHudController : MonoBehaviour
 
         CharacterData character = CharacterSession.Instance.SelectedCharacter;
         string sender = character != null ? character.Name : "Player";
-        chatLogText.text += $"\n[{sender}] {message}";
+        int actorId = character != null ? character.CharacterId : 0;
+        AppendChatLine(sender, message);
         chatInputField.text = string.Empty;
+        NetworkManager.Instance.SendPacket(new ChatPacket(actorId, sender, message));
+    }
+
+    /// 서버에서 받은 다른 플레이어 채팅을 현재 HUD에 반영합니다.
+    private void HandleChat(ChatPacket packet)
+    {
+        if (packet == null)
+        {
+            return;
+        }
+
+        CharacterData character = CharacterSession.Instance.SelectedCharacter;
+        if (character != null && packet.ActorId == character.CharacterId)
+        {
+            return;
+        }
+
+        AppendChatLine(packet.Sender, packet.Message);
+    }
+
+    /// 채팅 로그가 무한히 길어지지 않도록 최근 메시지만 유지합니다.
+    private void AppendChatLine(string sender, string message)
+    {
+        if (chatLogText == null || string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        string safeSender = string.IsNullOrWhiteSpace(sender) ? "Player" : sender;
+        chatLines.Add($"[{safeSender}] {message}");
+        while (chatLines.Count > 12)
+        {
+            chatLines.RemoveAt(0);
+        }
+
+        chatLogText.text = string.Join("\n", chatLines);
+    }
+
+    /// GameScene HUD가 살아있는 동안만 네트워크 이벤트를 받아 MissingReference를 방지합니다.
+    private void SubscribeNetworkEvents()
+    {
+        if (NetworkManager.Instance == null || NetworkManager.Instance.Dispatcher == subscribedDispatcher)
+        {
+            return;
+        }
+
+        UnsubscribeNetworkEvents();
+        subscribedDispatcher = NetworkManager.Instance.Dispatcher;
+        subscribedDispatcher.ChatReceived += HandleChat;
+    }
+
+    /// 씬 전환이나 HUD 파괴 후 패킷 콜백이 UI에 접근하지 않도록 구독을 해제합니다.
+    private void UnsubscribeNetworkEvents()
+    {
+        if (subscribedDispatcher == null)
+        {
+            return;
+        }
+
+        subscribedDispatcher.ChatReceived -= HandleChat;
+        subscribedDispatcher = null;
     }
 
     // 게임 씬에서도 현재 계정을 유지한 채 캐릭터 선택 화면으로 돌아갑니다.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using UnityEngine;
 
 public sealed class ServerTextProtocol
@@ -30,6 +31,8 @@ public sealed class ServerTextProtocol
                 return string.Format(CultureInfo.InvariantCulture, "STOP {0} {1} {2} {3} {4}", stop.ActorId, stop.Position.x, stop.Position.y, stop.Position.z, stop.Yaw);
             case SkillPacket skill:
                 return string.Format(CultureInfo.InvariantCulture, "SKILL {0} {1} {2} {3} {4} {5} {6} {7} {8}", skill.CasterId, skill.SkillSlot, skill.SkillId, skill.CastPosition.x, skill.CastPosition.y, skill.CastPosition.z, skill.CastDirection.x, skill.CastDirection.y, skill.CastDirection.z);
+            case ChatPacket chat:
+                return $"CHAT {chat.ActorId} {EncodeTextToken(chat.Sender)} {EncodeTextToken(chat.Message)}";
             default:
                 return string.Empty;
         }
@@ -158,6 +161,13 @@ public sealed class ServerTextProtocol
             yield break;
         }
 
+        if (line.StartsWith("CHAT", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new ChatPacket(ReadInt(values, "actorId"), DecodeTextToken(ReadString(values, "sender", string.Empty)), DecodeTextToken(ReadString(values, "message", string.Empty)));
+            yield break;
+        }
+
         if (line.StartsWith("DESPAWN", StringComparison.OrdinalIgnoreCase))
         {
             Dictionary<string, string> values = ParseValues(line);
@@ -247,6 +257,30 @@ public sealed class ServerTextProtocol
     private string ReadString(Dictionary<string, string> values, string key, string fallback)
     {
         return values.TryGetValue(key, out string value) ? value : fallback;
+    }
+
+    /// 채팅은 공백과 한글을 포함할 수 있으므로 한 줄 텍스트 프로토콜에서는 UTF-8 Base64 토큰으로 보냅니다.
+    private string EncodeTextToken(string value)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
+    }
+
+    /// 서버가 전달한 Base64 채팅 토큰을 Unity 문자열로 복원합니다.
+    private string DecodeTextToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(value));
+        }
+        catch (FormatException)
+        {
+            return value;
+        }
     }
 
     private int ReadInt(Dictionary<string, string> values, string key, int fallback = 0)

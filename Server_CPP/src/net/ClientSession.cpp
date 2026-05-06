@@ -194,6 +194,12 @@ bool ClientSession::HandleCommand(const std::string& line)
         return true;
     }
 
+    if (command.name == "CHAT")
+    {
+        HandleChat(command);
+        return true;
+    }
+
     if (command.name == "PING")
     {
         SendLine("PONG");
@@ -323,6 +329,20 @@ void ClientSession::HandleSkill(const ClientCommand& command)
         << " skillId=" << command.args[2]
         << " pos=" << command.args[3] << "," << command.args[4] << "," << command.args[5]
         << " dir=" << command.args[6] << "," << command.args[7] << "," << command.args[8];
+    BroadcastToOtherSessions(stream.str());
+}
+
+void ClientSession::HandleChat(const ClientCommand& command)
+{
+    if (!EnsureInGameFromRealtimeCommand(command) || command.args.size() < 3)
+    {
+        return;
+    }
+
+    std::ostringstream stream;
+    stream << "CHAT actorId=" << actorId_
+        << " sender=" << command.args[1]
+        << " message=" << command.args[2];
     BroadcastToOtherSessions(stream.str());
 }
 

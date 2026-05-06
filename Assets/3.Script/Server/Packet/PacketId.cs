@@ -19,5 +19,6 @@
     Skill = 2001,
     Damage = 3001,
     Spawn = 4001,
-    Despawn = 4002
+    Despawn = 4002,
+    Chat = 5001
 }

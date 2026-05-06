@@ -58,6 +58,7 @@ private:
     void HandleMove(const ClientCommand& command);
     void HandleStop(const ClientCommand& command);
     void HandleSkill(const ClientCommand& command);
+    void HandleChat(const ClientCommand& command);
     void BroadcastToOtherSessions(const std::string& line);
     static float ReadFloatArg(const ClientCommand& command, std::size_t index, float fallback);
 };

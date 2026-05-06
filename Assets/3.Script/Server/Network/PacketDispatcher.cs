@@ -16,6 +16,7 @@ public sealed class PacketDispatcher
     public event Action<DespawnPacket> DespawnReceived;
     public event Action<DamagePacket> DamageReceived;
     public event Action<SkillPacket> SkillReceived;
+    public event Action<ChatPacket> ChatReceived;
 
     private readonly Dictionary<int, SpawnPacket> knownRemoteSpawns = new Dictionary<int, SpawnPacket>();
 
@@ -70,6 +71,9 @@ public sealed class PacketDispatcher
                 break;
             case PacketId.Skill:
                 HandleSkill((SkillPacket)packet);
+                break;
+            case PacketId.Chat:
+                HandleChat((ChatPacket)packet);
                 break;
             default:
                 Debug.LogWarning($"Unhandled packet id: {packet.Id}");
@@ -168,5 +172,12 @@ public sealed class PacketDispatcher
     {
         Debug.Log($"[PacketDispatcher] Skill caster={packet.CasterId} slot={packet.SkillSlot} skill={packet.SkillId}");
         SkillReceived?.Invoke(packet);
+    }
+
+    /// 서버에서 브로드캐스트한 채팅 패킷을 게임 HUD로 전달합니다.
+    private void HandleChat(ChatPacket packet)
+    {
+        Debug.Log($"[PacketDispatcher] Chat actor={packet.ActorId} sender={packet.Sender}");
+        ChatReceived?.Invoke(packet);
     }
 }
