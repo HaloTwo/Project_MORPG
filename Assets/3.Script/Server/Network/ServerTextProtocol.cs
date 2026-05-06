@@ -24,6 +24,12 @@ public sealed class ServerTextProtocol
                 return $"DELETE_CHARACTER {delete.AccountId} {delete.CharacterId}";
             case EnterGameRequestPacket enter:
                 return $"ENTER_GAME {enter.CharacterId}";
+            case MovePacket move:
+                return string.Format(CultureInfo.InvariantCulture, "MOVE {0} {1} {2} {3} {4} {5} {6} {7} {8}", move.ActorId, move.Position.x, move.Position.y, move.Position.z, move.Direction.x, move.Direction.y, move.Direction.z, move.Yaw, move.MoveSpeed);
+            case StopPacket stop:
+                return string.Format(CultureInfo.InvariantCulture, "STOP {0} {1} {2} {3} {4}", stop.ActorId, stop.Position.x, stop.Position.y, stop.Position.z, stop.Yaw);
+            case SkillPacket skill:
+                return string.Format(CultureInfo.InvariantCulture, "SKILL {0} {1} {2} {3} {4} {5} {6} {7} {8}", skill.CasterId, skill.SkillSlot, skill.SkillId, skill.CastPosition.x, skill.CastPosition.y, skill.CastPosition.z, skill.CastDirection.x, skill.CastDirection.y, skill.CastDirection.z);
             default:
                 return string.Empty;
         }
@@ -124,6 +130,41 @@ public sealed class ServerTextProtocol
             yield break;
         }
 
+        if (line.StartsWith("SPAWN", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new SpawnPacket(ReadInt(values, "actorId"), ReadString(values, "type", "Player"), ReadVector3(values, "pos", Vector3.zero), ReadFloat(values, "yaw"));
+            yield break;
+        }
+
+        if (line.StartsWith("MOVE", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new MovePacket(ReadInt(values, "actorId"), ReadVector3(values, "pos", Vector3.zero), ReadVector3(values, "dir", Vector3.forward), ReadFloat(values, "yaw"), ReadFloat(values, "speed", 6.0f));
+            yield break;
+        }
+
+        if (line.StartsWith("STOP", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new StopPacket(ReadInt(values, "actorId"), ReadVector3(values, "pos", Vector3.zero), ReadFloat(values, "yaw"));
+            yield break;
+        }
+
+        if (line.StartsWith("SKILL", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new SkillPacket(ReadInt(values, "casterId"), ReadInt(values, "slot"), ReadInt(values, "skillId"), ReadVector3(values, "pos", Vector3.zero), ReadVector3(values, "dir", Vector3.forward));
+            yield break;
+        }
+
+        if (line.StartsWith("DESPAWN", StringComparison.OrdinalIgnoreCase))
+        {
+            Dictionary<string, string> values = ParseValues(line);
+            yield return new DespawnPacket(ReadInt(values, "actorId"));
+            yield break;
+        }
+
         if (receivingCharacterList && line.StartsWith("CHARACTER", StringComparison.OrdinalIgnoreCase))
         {
             pendingCharacters.Add(ParseCharacter(line));
@@ -175,14 +216,19 @@ public sealed class ServerTextProtocol
 
     private Vector3 ReadPosition(Dictionary<string, string> values)
     {
-        string rawPosition = ReadString(values, "pos", "0,1,0");
+        return ReadVector3(values, "pos", new Vector3(0.0f, 1.0f, 0.0f));
+    }
+
+    private Vector3 ReadVector3(Dictionary<string, string> values, string key, Vector3 fallback)
+    {
+        string rawPosition = ReadString(values, key, string.Format(CultureInfo.InvariantCulture, "{0},{1},{2}", fallback.x, fallback.y, fallback.z));
         string[] parts = rawPosition.Split(',');
         if (parts.Length != 3)
         {
-            return new Vector3(0.0f, 1.0f, 0.0f);
+            return fallback;
         }
 
-        return new Vector3(ReadFloat(parts[0]), ReadFloat(parts[1], 1.0f), ReadFloat(parts[2]));
+        return new Vector3(ReadFloat(parts[0], fallback.x), ReadFloat(parts[1], fallback.y), ReadFloat(parts[2], fallback.z));
     }
 
     private int[] ReadSkillIds(Dictionary<string, string> values)
@@ -211,6 +257,11 @@ public sealed class ServerTextProtocol
     private int ReadInt(string value, int fallback = 0)
     {
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result) ? result : fallback;
+    }
+
+    private float ReadFloat(Dictionary<string, string> values, string key, float fallback = 0.0f)
+    {
+        return values.TryGetValue(key, out string value) ? ReadFloat(value, fallback) : fallback;
     }
 
     private float ReadFloat(string value, float fallback = 0.0f)

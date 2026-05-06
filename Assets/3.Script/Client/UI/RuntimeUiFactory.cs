@@ -58,6 +58,7 @@ public static class RuntimeUiFactory
 
         Image image = panelObject.GetComponent<Image>();
         image.color = color;
+        image.raycastTarget = false;
         return rect;
     }
 

@@ -3,6 +3,7 @@
 #include "protocol/PacketCodec.h"
 
 #include <iostream>
+#include <sstream>
 #include <utility>
 
 ClientSession::ClientSession(SOCKET socket, std::shared_ptr<AuthService> authService)
@@ -11,12 +12,17 @@ ClientSession::ClientSession(SOCKET socket, std::shared_ptr<AuthService> authSer
 {
 }
 
+void ClientSession::SetCallbacks(BroadcastCallback broadcastCallback, EnterCallback enterCallback, LeaveCallback leaveCallback)
+{
+    broadcastCallback_ = std::move(broadcastCallback);
+    enterCallback_ = std::move(enterCallback);
+    leaveCallback_ = std::move(leaveCallback);
+}
+
 void ClientSession::Run()
 {
-    // 클라이언트가 접속하면 첫 줄로 서버 식별 메시지를 보냅니다.
     SendLine("WELCOME ProjectMORPGServer");
 
-    // 클라이언트가 보낸 줄 단위 명령을 계속 읽고 처리합니다.
     std::string line;
     while (ReceiveLine(line))
     {
@@ -26,16 +32,44 @@ void ClientSession::Run()
         }
     }
 
-    // QUIT 명령을 받거나 연결이 끊기면 소켓을 닫습니다.
+    if (leaveCallback_ != nullptr)
+    {
+        leaveCallback_(shared_from_this());
+    }
+
     closesocket(socket_);
     std::cout << "[Session] Disconnected" << std::endl;
+}
+
+bool ClientSession::SendFromServer(const std::string& line)
+{
+    return SendLine(line);
+}
+
+bool ClientSession::IsInGame() const
+{
+    return inGame_ && actorId_ > 0;
+}
+
+std::int32_t ClientSession::GetActorId() const
+{
+    return actorId_;
+}
+
+std::string ClientSession::MakeSpawnLine() const
+{
+    std::ostringstream stream;
+    stream << "SPAWN actorId=" << actorId_
+        << " type=Player"
+        << " pos=" << posX_ << "," << posY_ << "," << posZ_
+        << " yaw=" << yaw_;
+    return stream.str();
 }
 
 bool ClientSession::ReceiveLine(std::string& outLine)
 {
     while (true)
     {
-        // TCP는 메시지 경계를 보장하지 않으므로, 내부 버퍼에서 '\n'을 찾아 한 줄씩 잘라냅니다.
         const std::size_t newline = receiveBuffer_.find('\n');
         if (newline != std::string::npos)
         {
@@ -49,7 +83,6 @@ bool ClientSession::ReceiveLine(std::string& outLine)
             return true;
         }
 
-        // 아직 한 줄이 완성되지 않았다면 소켓에서 데이터를 더 받습니다.
         char buffer[512] = {};
         const int received = recv(socket_, buffer, static_cast<int>(sizeof(buffer)), 0);
         if (received <= 0)
@@ -63,8 +96,7 @@ bool ClientSession::ReceiveLine(std::string& outLine)
 
 bool ClientSession::SendLine(const std::string& line)
 {
-    // 현재 프로토콜은 사람이 읽기 쉬운 줄 단위 텍스트 패킷입니다.
-    // Unity/C++ 연동이 안정되면 바이너리 패킷이나 Protobuf로 교체할 수 있습니다.
+    std::lock_guard<std::mutex> lock(sendMutex_);
     const std::string payload = line + "\n";
     const int sent = send(socket_, payload.c_str(), static_cast<int>(payload.size()), 0);
     return sent == static_cast<int>(payload.size());
@@ -72,14 +104,11 @@ bool ClientSession::SendLine(const std::string& line)
 
 bool ClientSession::HandleCommand(const std::string& line)
 {
-    // "LOGIN test_user password" 같은 한 줄 문자열을 명령과 인자로 분리합니다.
     const ClientCommand command = PacketCodec::DecodeClientCommand(line);
     std::cout << "[Session] Request: " << line << std::endl;
 
     if (command.name == "LOGIN")
     {
-        // LOGIN loginId password
-        // 서버가 DB에서 계정을 조회하고 캐릭터 목록까지 내려줍니다.
         if (command.args.size() < 2)
         {
             SendLine(PacketCodec::EncodeLoginFail("InvalidLoginFormat"));
@@ -97,8 +126,6 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     if (command.name == "REGISTER")
     {
-        // REGISTER loginId password
-        // 서버가 새 계정을 DB에 생성하고 빈 캐릭터 목록을 반환합니다.
         if (command.args.size() < 2)
         {
             SendLine(PacketCodec::EncodeRegisterFail("InvalidRegisterFormat"));
@@ -116,8 +143,6 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     if (command.name == "CREATE_CHARACTER")
     {
-        // CREATE_CHARACTER accountId slotIndex classType
-        // 예: CREATE_CHARACTER 1 0 Warrior
         if (command.args.size() < 3)
         {
             SendLine(PacketCodec::EncodeCreateCharacterFail("InvalidCreateCharacterFormat"));
@@ -133,8 +158,6 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     if (command.name == "DELETE_CHARACTER")
     {
-        // DELETE_CHARACTER accountId characterId
-        // 계정 소유 캐릭터인지 확인 가능한 조건으로 삭제합니다.
         if (command.args.size() < 2)
         {
             SendLine(PacketCodec::EncodeDeleteCharacterFail(0, "InvalidDeleteCharacterFormat"));
@@ -149,15 +172,25 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     if (command.name == "ENTER_GAME")
     {
-        // ENTER_GAME characterId
-        // 선택한 캐릭터의 상세 정보를 가져와 게임 입장 응답을 보냅니다.
-        if (command.args.empty())
-        {
-            SendLine(PacketCodec::EncodeEnterGameFail("InvalidEnterGameFormat"));
-            return true;
-        }
+        HandleEnterGame(command);
+        return true;
+    }
 
-        SendLine(authService_->HandleEnterGame(std::stoi(command.args[0])));
+    if (command.name == "MOVE")
+    {
+        HandleMove(command);
+        return true;
+    }
+
+    if (command.name == "STOP")
+    {
+        HandleStop(command);
+        return true;
+    }
+
+    if (command.name == "SKILL")
+    {
+        HandleSkill(command);
         return true;
     }
 
@@ -175,4 +208,151 @@ bool ClientSession::HandleCommand(const std::string& line)
 
     SendLine("ERROR message=UnknownCommand");
     return true;
+}
+
+void ClientSession::HandleEnterGame(const ClientCommand& command)
+{
+    if (command.args.empty())
+    {
+        SendLine(PacketCodec::EncodeEnterGameFail("InvalidEnterGameFormat"));
+        return;
+    }
+
+    actorId_ = std::stoi(command.args[0]);
+    const std::string response = authService_->HandleEnterGame(actorId_);
+    SendLine(response);
+
+    if (response.rfind("ENTER_GAME_OK", 0) != 0)
+    {
+        actorId_ = 0;
+        inGame_ = false;
+        return;
+    }
+
+    inGame_ = true;
+    posX_ = 0.0f;
+    posY_ = 1.0f;
+    posZ_ = 0.0f;
+    yaw_ = 0.0f;
+
+    if (enterCallback_ != nullptr)
+    {
+        enterCallback_(shared_from_this());
+    }
+}
+
+bool ClientSession::EnsureInGameFromRealtimeCommand(const ClientCommand& command)
+{
+    if (IsInGame())
+    {
+        return true;
+    }
+
+    if (command.args.empty())
+    {
+        return false;
+    }
+
+    actorId_ = std::stoi(command.args[0]);
+    inGame_ = actorId_ > 0;
+
+    if (!inGame_)
+    {
+        return false;
+    }
+
+    std::cout << "[Session] Recovered in-game session from realtime packet actor=" << actorId_ << std::endl;
+    if (enterCallback_ != nullptr)
+    {
+        enterCallback_(shared_from_this());
+    }
+
+    return true;
+}
+
+void ClientSession::HandleMove(const ClientCommand& command)
+{
+    if (!EnsureInGameFromRealtimeCommand(command) || command.args.size() < 9)
+    {
+        return;
+    }
+
+    posX_ = ReadFloatArg(command, 1, posX_);
+    posY_ = ReadFloatArg(command, 2, posY_);
+    posZ_ = ReadFloatArg(command, 3, posZ_);
+    yaw_ = ReadFloatArg(command, 7, yaw_);
+
+    std::ostringstream stream;
+    stream << "MOVE actorId=" << actorId_
+        << " pos=" << posX_ << "," << posY_ << "," << posZ_
+        << " dir=" << ReadFloatArg(command, 4, 0.0f) << "," << ReadFloatArg(command, 5, 0.0f) << "," << ReadFloatArg(command, 6, 0.0f)
+        << " yaw=" << yaw_
+        << " speed=" << ReadFloatArg(command, 8, 6.0f);
+    BroadcastToOtherSessions(stream.str());
+}
+
+void ClientSession::HandleStop(const ClientCommand& command)
+{
+    if (!EnsureInGameFromRealtimeCommand(command) || command.args.size() < 5)
+    {
+        return;
+    }
+
+    posX_ = ReadFloatArg(command, 1, posX_);
+    posY_ = ReadFloatArg(command, 2, posY_);
+    posZ_ = ReadFloatArg(command, 3, posZ_);
+    yaw_ = ReadFloatArg(command, 4, yaw_);
+
+    std::ostringstream stream;
+    stream << "STOP actorId=" << actorId_
+        << " pos=" << posX_ << "," << posY_ << "," << posZ_
+        << " yaw=" << yaw_;
+    BroadcastToOtherSessions(stream.str());
+}
+
+void ClientSession::HandleSkill(const ClientCommand& command)
+{
+    if (!EnsureInGameFromRealtimeCommand(command) || command.args.size() < 9)
+    {
+        return;
+    }
+
+    std::ostringstream stream;
+    stream << "SKILL casterId=" << actorId_
+        << " slot=" << command.args[1]
+        << " skillId=" << command.args[2]
+        << " pos=" << command.args[3] << "," << command.args[4] << "," << command.args[5]
+        << " dir=" << command.args[6] << "," << command.args[7] << "," << command.args[8];
+    BroadcastToOtherSessions(stream.str());
+}
+
+void ClientSession::BroadcastToOtherSessions(const std::string& line)
+{
+    std::cout << "[Session] Broadcast request actor=" << actorId_
+        << " line=" << line << std::endl;
+
+    if (broadcastCallback_ != nullptr)
+    {
+        broadcastCallback_(shared_from_this(), line);
+        return;
+    }
+
+    std::cout << "[Session] Broadcast callback is null actor=" << actorId_ << std::endl;
+}
+
+float ClientSession::ReadFloatArg(const ClientCommand& command, std::size_t index, float fallback)
+{
+    if (index >= command.args.size())
+    {
+        return fallback;
+    }
+
+    try
+    {
+        return std::stof(command.args[index]);
+    }
+    catch (...)
+    {
+        return fallback;
+    }
 }

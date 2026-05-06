@@ -18,6 +18,10 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
     [SerializeField] private int initialTrailPoolSize = 18;
     [SerializeField] private float trailLifeTime = 0.26f;
     [SerializeField] private Vector2 topUiSafeAreaMin = new Vector2(0.76f, 0.74f);
+    [SerializeField] private Vector2 bottomRightUiSafeAreaMin = new Vector2(0.70f, 0.0f);
+    [SerializeField] private Vector2 bottomRightUiSafeAreaMax = new Vector2(0.96f, 0.24f);
+    [SerializeField] private Vector2 bottomCenterUiSafeAreaMin = new Vector2(0.34f, 0.0f);
+    [SerializeField] private Vector2 bottomCenterUiSafeAreaMax = new Vector2(0.62f, 0.18f);
 
     private RectTransform root;
     private RectTransform visualRoot;
@@ -42,7 +46,25 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
             return false;
         }
 
+        if (IsInsideNormalizedScreenRect(screenPosition, bottomRightUiSafeAreaMin, bottomRightUiSafeAreaMax))
+        {
+            return false;
+        }
+
+        if (IsInsideNormalizedScreenRect(screenPosition, bottomCenterUiSafeAreaMin, bottomCenterUiSafeAreaMax))
+        {
+            return false;
+        }
+
         return true;
+    }
+
+    // 스킬/아이템 버튼 영역은 조이스틱 레이어가 클릭을 가로채지 않도록 정규화된 화면 영역으로 제외합니다.
+    private bool IsInsideNormalizedScreenRect(Vector2 screenPosition, Vector2 min, Vector2 max)
+    {
+        float normalizedX = Screen.width <= 0 ? 0.0f : screenPosition.x / Screen.width;
+        float normalizedY = Screen.height <= 0 ? 0.0f : screenPosition.y / Screen.height;
+        return normalizedX >= min.x && normalizedX <= max.x && normalizedY >= min.y && normalizedY <= max.y;
     }
 
     private sealed class TrailDot
@@ -85,6 +107,7 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
             inputSurface = gameObject.AddComponent<Image>();
         }
         inputSurface.color = new Color(1.0f, 1.0f, 1.0f, 0.0f);
+        inputSurface.raycastTarget = true;
 
         GameObject visualObject = new GameObject("VisualRoot", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
         visualObject.transform.SetParent(transform, false);
@@ -207,10 +230,7 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
         isCameraDragActive = true;
         previousPinchDistance = 0.0f;
 
-        if (cameraController == null && Camera.main != null)
-        {
-            cameraController = Camera.main.GetComponent<QuarterViewCameraController>();
-        }
+        EnsureCameraController();
     }
 
     // 화면 좌표를 조이스틱 내부 좌표로 바꾸고 입력 벡터를 갱신합니다.
@@ -231,6 +251,11 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
     {
         if (cameraController == null)
         {
+            EnsureCameraController();
+        }
+
+        if (cameraController == null)
+        {
             return;
         }
 
@@ -246,10 +271,7 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
             return;
         }
 
-        if (cameraController == null && Camera.main != null)
-        {
-            cameraController = Camera.main.GetComponent<QuarterViewCameraController>();
-        }
+        EnsureCameraController();
 
         if (cameraController == null || !TryReadTwoFingerGesture(out float currentDistance, out Vector2 averageDelta))
         {
@@ -301,6 +323,25 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
 #endif
 
         return false;
+    }
+
+    // Camera.main 태그가 빠진 씬에서도 카메라 회전이 동작하도록 컨트롤러를 한 번 더 찾아봅니다.
+    private void EnsureCameraController()
+    {
+        if (cameraController != null)
+        {
+            return;
+        }
+
+        if (Camera.main != null)
+        {
+            cameraController = Camera.main.GetComponent<QuarterViewCameraController>();
+        }
+
+        if (cameraController == null)
+        {
+            cameraController = FindFirstObjectByType<QuarterViewCameraController>();
+        }
     }
 
     // 드래그 잔상 오브젝트를 미리 만들어두고 필요할 때 재사용합니다.

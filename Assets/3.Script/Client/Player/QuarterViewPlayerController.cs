@@ -1,8 +1,5 @@
-﻿using System;
+using System;
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 
 [RequireComponent(typeof(CharacterController))]
 public sealed class QuarterViewPlayerController : MonoBehaviour
@@ -67,21 +64,10 @@ public sealed class QuarterViewPlayerController : MonoBehaviour
         characterController.enabled = wasEnabled;
     }
 
-    // 가상 조이스틱과 키보드 입력을 카메라 기준 쿼터뷰 이동 방향으로 변환합니다.
+    // 모바일 우선 구조라 이동 입력은 가상 조이스틱에서만 읽습니다.
     private Vector3 ReadMoveDirection()
     {
-        Vector2 input = Vector2.zero;
-
-        if (VirtualJoystick.Instance != null)
-        {
-            input = VirtualJoystick.Instance.InputVector;
-        }
-
-        if (input.sqrMagnitude < inputDeadZone * inputDeadZone)
-        {
-            input = ReadKeyboardInput();
-        }
-
+        Vector2 input = VirtualJoystick.Instance != null ? VirtualJoystick.Instance.InputVector : Vector2.zero;
         input = Vector2.ClampMagnitude(input, 1.0f);
         if (input.sqrMagnitude < inputDeadZone * inputDeadZone)
         {
@@ -98,28 +84,6 @@ public sealed class QuarterViewPlayerController : MonoBehaviour
         right.Normalize();
 
         return (forward * input.y + right * input.x).normalized;
-    }
-
-    // 에디터 테스트용 키보드 입력도 함께 지원합니다.
-    private Vector2 ReadKeyboardInput()
-    {
-#if ENABLE_INPUT_SYSTEM
-        if (Keyboard.current != null)
-        {
-            Vector2 input = Vector2.zero;
-            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) input.x -= 1.0f;
-            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) input.x += 1.0f;
-            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) input.y -= 1.0f;
-            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) input.y += 1.0f;
-            return input;
-        }
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        return new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-#else
-        return Vector2.zero;
-#endif
     }
 
     // CharacterController를 사용해 조이스틱 방향으로 이동하고 간단한 중력을 적용합니다.
@@ -149,7 +113,6 @@ public sealed class QuarterViewPlayerController : MonoBehaviour
     }
 
     // 이동 상태를 매 프레임 검사하되, 패킷은 시작/방향 변경/주기적 보정/정지 시점에만 보냅니다.
-    // 실시간 이동은 Update로 입력을 읽을 수밖에 없지만, 네트워크 송신까지 매 프레임 때리지는 않도록 제한합니다.
     private void DetectMoveState(Vector3 moveDirection)
     {
         bool isMoving = moveDirection.sqrMagnitude > 0.001f;

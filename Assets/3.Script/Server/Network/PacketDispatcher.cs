@@ -12,6 +12,7 @@ public sealed class PacketDispatcher
     public event Action<MovePacket> MoveReceived;
     public event Action<StopPacket> StopReceived;
     public event Action<SpawnPacket> SpawnReceived;
+    public event Action<DespawnPacket> DespawnReceived;
     public event Action<DamagePacket> DamageReceived;
     public event Action<SkillPacket> SkillReceived;
 
@@ -51,6 +52,9 @@ public sealed class PacketDispatcher
                 break;
             case PacketId.Spawn:
                 HandleSpawn((SpawnPacket)packet);
+                break;
+            case PacketId.Despawn:
+                HandleDespawn((DespawnPacket)packet);
                 break;
             case PacketId.Damage:
                 HandleDamage((DamagePacket)packet);
@@ -131,6 +135,12 @@ public sealed class PacketDispatcher
     {
         Debug.Log($"[PacketDispatcher] Spawn actor={packet.ActorId} type={packet.EntityType}");
         SpawnReceived?.Invoke(packet);
+    }
+
+    private void HandleDespawn(DespawnPacket packet)
+    {
+        Debug.Log($"[PacketDispatcher] Despawn actor={packet.ActorId}");
+        DespawnReceived?.Invoke(packet);
     }
 
     // 서버가 최종 판정한 데미지와 HP 변경 내용을 처리합니다.

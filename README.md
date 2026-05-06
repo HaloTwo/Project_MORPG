@@ -87,6 +87,18 @@ LoginScene / CharacterSelectScene
 - `IAccountRepository`: 저장소 추상화
 - `MariaDbAccountRepository`: MariaDB 조회/저장/삭제 구현
 
+## 🧍 멀티플레이 동기화 기초
+
+- 서로 다른 Unity 클라이언트가 동일한 C++ TCP 서버에 접속
+- 캐릭터 입장 후 서버 세션 기준으로 원격 플레이어 Spawn 처리
+- `MOVE`, `STOP`, `SPAWN`, `DESPAWN` 패킷을 서버가 다른 클라이언트에 브로드캐스트
+- 클라이언트는 원격 플레이어를 별도 컨트롤러로 생성하고 위치를 보간
+- `ENTER_GAME` 이후 GameScene 전환 중 TCP 연결이 끊기지 않도록 `NetworkManager` 연결 생명주기 정리
+- Spawn 패킷을 놓친 경우에도 Move 패킷 기준으로 원격 플레이어를 복구 생성
+
+> 현재는 포트폴리오 검증을 위한 실시간 동기화 1차 단계입니다.
+> 이후에는 서버 Tick, 이동 검증, 위치 보정, 보간 버퍼를 추가해 실제 온라인 RPG 구조에 가깝게 확장할 예정입니다.
+
 ---
 
 ## 🗄 DB 설계
@@ -174,6 +186,21 @@ equipment
 
 </details>
 
+<details>
+<summary><b>5일차 - TCP 멀티 접속과 원격 플레이어 동기화</b></summary>
+
+- Windows 빌드와 Unity Editor를 동시에 실행해 2클라이언트 접속 테스트
+- C++ 서버에서 입장한 세션 목록을 관리하고 Spawn / Move / Stop / Despawn 브로드캐스트 구현
+- Unity 클라이언트에서 원격 플레이어 Dictionary 관리 및 파란 캡슐 fallback 표시
+- GameScene 진입 시 기존 TCP 연결이 끊기던 문제 수정
+- Move 패킷만 먼저 수신해도 원격 플레이어를 복구 생성하도록 방어 로직 추가
+- 빌드본에서 런타임 생성 캡슐이 보라색으로 출력되는 문제를 막기 위해 URP 호환 런타임 머티리얼 적용
+
+> 단순히 “두 클라이언트가 접속된다”에서 끝내지 않고,
+> 서버가 세션을 기준으로 플레이어 상태를 전달하고 클라이언트가 원격 캐릭터를 별도 객체로 재현하는 흐름까지 확인했습니다.
+
+</details>
+
 ---
 
 ## ✅ 현재 동작 흐름
@@ -189,6 +216,7 @@ equipment
 8. 생성된 캐릭터 입장 또는 삭제
 9. GameScene 입장 후 쿼터뷰 맵에서 조이스틱 이동
 10. 캐릭터 선택창으로 복귀 가능
+11. 두 클라이언트 접속 시 원격 플레이어 Spawn / Move / Stop 동기화
 ```
 
 ## 🎥 동작 GIF
@@ -264,6 +292,8 @@ equipment
 - 스킬 사용 요청과 서버 검증
 - HP / 데미지 계산 서버 처리
 - 이동 패킷 검증
+- 서버 Tick 기반 이동 브로드캐스트 정리
+- 원격 플레이어 보간 버퍼 및 위치 보정
 - NavMesh 기반 이동 가능 영역 정리
 - 맵 오브젝트별 충돌 박스 세밀 조정
 - Blocking TCP 서버를 IOCP 기반 구조로 개선

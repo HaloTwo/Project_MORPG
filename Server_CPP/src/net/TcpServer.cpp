@@ -4,6 +4,7 @@
 
 #include <ws2tcpip.h>
 
+#include <algorithm>
 #include <iostream>
 #include <thread>
 #include <utility>
@@ -16,7 +17,6 @@ TcpServer::TcpServer(unsigned short port, std::shared_ptr<AuthService> authServi
 
 TcpServer::~TcpServer()
 {
-    // 서버 종료 시 listen 소켓과 Winsock 자원을 정리합니다.
     if (listenSocket_ != INVALID_SOCKET)
     {
         closesocket(listenSocket_);
@@ -27,29 +27,23 @@ TcpServer::~TcpServer()
 
 bool TcpServer::Start()
 {
-    // Windows 소켓 API를 먼저 초기화합니다.
     if (!InitializeWinsock())
     {
         return false;
     }
 
-    // 클라이언트가 접속할 listen 소켓을 생성하고 포트에 바인딩합니다.
     if (!CreateListenSocket())
     {
         return false;
     }
 
     std::cout << "[Server] Listening on port " << port_ << std::endl;
-
-    // 여기서부터 서버는 계속 accept 대기 상태로 들어갑니다.
-    // 현재는 학습용 구조라 블로킹 accept 루프를 사용합니다.
     AcceptLoop();
     return true;
 }
 
 bool TcpServer::InitializeWinsock()
 {
-    // Winsock은 Windows에서 socket/recv/send를 쓰기 전에 반드시 초기화해야 합니다.
     WSADATA data;
     const int result = WSAStartup(MAKEWORD(2, 2), &data);
     if (result != 0)
@@ -63,7 +57,6 @@ bool TcpServer::InitializeWinsock()
 
 bool TcpServer::CreateListenSocket()
 {
-    // IPv4 TCP 소켓을 생성합니다.
     listenSocket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listenSocket_ == INVALID_SOCKET)
     {
@@ -71,8 +64,6 @@ bool TcpServer::CreateListenSocket()
         return false;
     }
 
-    // 0.0.0.0:port에 바인딩합니다.
-    // INADDR_ANY는 현재 PC의 모든 네트워크 인터페이스에서 접속을 받겠다는 뜻입니다.
     sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -84,7 +75,6 @@ bool TcpServer::CreateListenSocket()
         return false;
     }
 
-    // listen 상태로 전환하면 클라이언트 connect 요청을 받을 수 있습니다.
     if (listen(listenSocket_, SOMAXCONN) == SOCKET_ERROR)
     {
         std::cerr << "[Server] listen failed: " << WSAGetLastError() << std::endl;
@@ -98,7 +88,6 @@ void TcpServer::AcceptLoop()
 {
     while (true)
     {
-        // 클라이언트가 접속할 때까지 여기서 대기합니다.
         SOCKET clientSocket = accept(listenSocket_, nullptr, nullptr);
         if (clientSocket == INVALID_SOCKET)
         {
@@ -108,12 +97,112 @@ void TcpServer::AcceptLoop()
 
         std::cout << "[Server] Client connected" << std::endl;
 
-        // 지금은 접속마다 thread 하나를 만들어 처리합니다.
-        // 최종 목표인 IOCP 서버에서는 이 부분이 비동기 I/O 기반 세션 처리로 바뀝니다.
-        std::thread([clientSocket, authService = authService_]()
+        auto session = std::make_shared<ClientSession>(clientSocket, authService_);
+        session->SetCallbacks(
+            [this](std::shared_ptr<ClientSession> sender, const std::string& line)
+            {
+                BroadcastFromSession(sender, line);
+            },
+            [this](std::shared_ptr<ClientSession> enteredSession)
+            {
+                HandleSessionEntered(enteredSession);
+            },
+            [this](std::shared_ptr<ClientSession> closedSession)
+            {
+                RemoveSession(closedSession);
+            });
+
+        RegisterSession(session);
+
+        std::thread([session]()
         {
-            ClientSession session(clientSocket, authService);
-            session.Run();
+            session->Run();
         }).detach();
     }
+}
+
+void TcpServer::RegisterSession(const std::shared_ptr<ClientSession>& session)
+{
+    std::lock_guard<std::mutex> lock(sessionsMutex_);
+    sessions_.push_back(session);
+}
+
+void TcpServer::HandleSessionEntered(const std::shared_ptr<ClientSession>& session)
+{
+    std::vector<std::shared_ptr<ClientSession>> sessions = GetLiveSessions();
+
+    for (const std::shared_ptr<ClientSession>& other : sessions)
+    {
+        if (other == session || !other->IsInGame())
+        {
+            continue;
+        }
+
+        std::cout << "[Server] Send existing spawn actor=" << other->GetActorId()
+            << " to actor=" << session->GetActorId() << std::endl;
+        session->SendFromServer(other->MakeSpawnLine());
+    }
+
+    std::cout << "[Server] Broadcast spawn actor=" << session->GetActorId() << std::endl;
+    BroadcastFromSession(session, session->MakeSpawnLine());
+}
+
+void TcpServer::BroadcastFromSession(const std::shared_ptr<ClientSession>& sender, const std::string& line)
+{
+    std::vector<std::shared_ptr<ClientSession>> sessions = GetLiveSessions();
+    for (const std::shared_ptr<ClientSession>& session : sessions)
+    {
+        if (session == sender || !session->IsInGame())
+        {
+            continue;
+        }
+
+        std::cout << "[Server] Broadcast to actor=" << session->GetActorId()
+            << " line=" << line << std::endl;
+        session->SendFromServer(line);
+    }
+}
+
+void TcpServer::RemoveSession(const std::shared_ptr<ClientSession>& session)
+{
+    const std::int32_t actorId = session != nullptr ? session->GetActorId() : 0;
+    {
+        std::lock_guard<std::mutex> lock(sessionsMutex_);
+        sessions_.erase(
+            std::remove_if(sessions_.begin(), sessions_.end(),
+                [&session](const std::weak_ptr<ClientSession>& weakSession)
+                {
+                    std::shared_ptr<ClientSession> locked = weakSession.lock();
+                    return locked == nullptr || locked == session;
+                }),
+            sessions_.end());
+    }
+
+    if (actorId > 0)
+    {
+        BroadcastFromSession(session, "DESPAWN actorId=" + std::to_string(actorId));
+    }
+}
+
+std::vector<std::shared_ptr<ClientSession>> TcpServer::GetLiveSessions()
+{
+    std::vector<std::shared_ptr<ClientSession>> liveSessions;
+    std::lock_guard<std::mutex> lock(sessionsMutex_);
+
+    sessions_.erase(
+        std::remove_if(sessions_.begin(), sessions_.end(),
+            [&liveSessions](const std::weak_ptr<ClientSession>& weakSession)
+            {
+                std::shared_ptr<ClientSession> locked = weakSession.lock();
+                if (locked == nullptr)
+                {
+                    return true;
+                }
+
+                liveSessions.push_back(locked);
+                return false;
+            }),
+        sessions_.end());
+
+    return liveSessions;
 }

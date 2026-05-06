@@ -60,6 +60,13 @@ public sealed class NetworkManager : MonoBehaviour
     {
         string targetHost = string.IsNullOrWhiteSpace(host) ? serverHost : host;
         int targetPort = port <= 0 ? serverPort : port;
+
+        if (IsConnected && tcpConnection != null)
+        {
+            Debug.Log($"[NetworkManager] Already connected to {targetHost}:{targetPort}");
+            return;
+        }
+
         tcpConnection?.Dispose();
         tcpConnection = new TcpServerConnection(textProtocol, receiveQueue);
         tcpConnection.Disconnected += HandleTcpDisconnected;

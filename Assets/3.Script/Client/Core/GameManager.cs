@@ -1,13 +1,13 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 public sealed class GameManager : MonoBehaviour
 {
     [SerializeField] private QuarterViewPlayerController localPlayerPrefab;
     [SerializeField] private RemotePlayerController remotePlayerPrefab;
     [SerializeField] private Transform playerRoot;
+    [SerializeField] private bool createDemoCombatDummies = true;
+    [SerializeField] private int demoDummyCount = 5;
 
     private readonly Dictionary<int, RemotePlayerController> remotePlayers = new Dictionary<int, RemotePlayerController>();
     private QuarterViewPlayerController localPlayer;
@@ -44,7 +44,7 @@ public sealed class GameManager : MonoBehaviour
         PrepareLocalPlayer();
         NetworkManager.Instance.Connect();
         ApplySelectedCharacterIfExists();
-        BuildReturnButton();
+        PrepareDemoCombatDummies();
     }
 
     // 씬에 이미 놓인 플레이어를 먼저 찾고, 없으면 프리팹으로 생성합니다.
@@ -154,14 +154,48 @@ public sealed class GameManager : MonoBehaviour
         switch (classType)
         {
             case ClassType.Warrior:
-                renderer.material.color = new Color(0.9f, 0.25f, 0.2f, 1.0f);
+                RuntimeMaterialUtility.ApplyColor(renderer, new Color(0.9f, 0.25f, 0.2f, 1.0f));
                 break;
             case ClassType.Archer:
-                renderer.material.color = new Color(0.2f, 0.75f, 0.25f, 1.0f);
+                RuntimeMaterialUtility.ApplyColor(renderer, new Color(0.2f, 0.75f, 0.25f, 1.0f));
                 break;
             case ClassType.Rogue:
-                renderer.material.color = new Color(0.45f, 0.25f, 0.9f, 1.0f);
+                RuntimeMaterialUtility.ApplyColor(renderer, new Color(0.45f, 0.25f, 0.9f, 1.0f));
                 break;
+        }
+    }
+
+    // 전투 서버 판정과 몬스터 프리팹이 붙기 전까지 스킬 UI/데미지 표시를 확인할 임시 타겟을 배치합니다.
+    private void PrepareDemoCombatDummies()
+    {
+        if (!createDemoCombatDummies || FindFirstObjectByType<CombatDummy>() != null)
+        {
+            return;
+        }
+
+        Vector3 center = localPlayer != null ? localPlayer.transform.position : Vector3.zero;
+        Vector3[] offsets =
+        {
+            new Vector3(0.0f, 0.0f, 6.0f),
+            new Vector3(-3.0f, 0.0f, 7.0f),
+            new Vector3(3.0f, 0.0f, 7.0f),
+            new Vector3(-5.0f, 0.0f, 4.5f),
+            new Vector3(5.0f, 0.0f, 4.5f)
+        };
+
+        int count = Mathf.Clamp(demoDummyCount, 1, offsets.Length);
+        for (int i = 0; i < count; i++)
+        {
+            GameObject dummyObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            dummyObject.name = $"TrainingDummy_{i + 1}";
+            dummyObject.transform.SetParent(playerRoot, false);
+            dummyObject.transform.position = center + offsets[i];
+            dummyObject.transform.localScale = new Vector3(0.85f, 1.35f, 0.85f);
+
+            Renderer renderer = dummyObject.GetComponent<Renderer>();
+            RuntimeMaterialUtility.ApplyColor(renderer, new Color(0.82f, 0.88f, 0.92f, 1.0f));
+
+            dummyObject.AddComponent<CombatDummy>();
         }
     }
 
@@ -176,14 +210,39 @@ public sealed class GameManager : MonoBehaviour
 
         if (remotePlayerPrefab == null)
         {
-            Debug.LogWarning("[GameManager] Remote player prefab이 아직 지정되지 않았습니다.");
-            return null;
+            RemotePlayerController fallbackRemote = CreateFallbackRemotePlayer(actorId, position, yaw);
+            remotePlayers.Add(actorId, fallbackRemote);
+            return fallbackRemote;
         }
 
         RemotePlayerController remotePlayer = Instantiate(remotePlayerPrefab, position, Quaternion.Euler(0.0f, yaw, 0.0f), playerRoot);
         remotePlayer.Initialize(actorId);
         remotePlayer.SetTargetPosition(position, yaw);
         remotePlayers.Add(actorId, remotePlayer);
+        return remotePlayer;
+    }
+
+    // 원격 플레이어 프리팹이 아직 없을 때도 멀티 접속 확인이 가능하도록 임시 캡슐을 만듭니다.
+    private RemotePlayerController CreateFallbackRemotePlayer(int actorId, Vector3 position, float yaw)
+    {
+        GameObject remoteObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        remoteObject.name = $"RemotePlayer_{actorId}";
+        remoteObject.transform.SetParent(playerRoot, false);
+        remoteObject.transform.position = position;
+        remoteObject.transform.rotation = Quaternion.Euler(0.0f, yaw, 0.0f);
+
+        Renderer renderer = remoteObject.GetComponent<Renderer>();
+        RuntimeMaterialUtility.ApplyColor(renderer, new Color(0.25f, 0.55f, 1.0f, 1.0f));
+
+        Collider collider = remoteObject.GetComponent<Collider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        RemotePlayerController remotePlayer = remoteObject.AddComponent<RemotePlayerController>();
+        remotePlayer.Initialize(actorId);
+        remotePlayer.SetTargetPosition(position, yaw);
         return remotePlayer;
     }
 
@@ -216,7 +275,13 @@ public sealed class GameManager : MonoBehaviour
             return;
         }
 
-        if (remotePlayers.TryGetValue(packet.ActorId, out RemotePlayerController remotePlayer))
+        if (!remotePlayers.TryGetValue(packet.ActorId, out RemotePlayerController remotePlayer))
+        {
+            Debug.Log($"[GameManager] Remote player was missing on MOVE. Spawn fallback actor={packet.ActorId}");
+            remotePlayer = SpawnRemotePlayer(packet.ActorId, packet.Position, packet.Yaw);
+        }
+
+        if (remotePlayer != null)
         {
             remotePlayer.SetTargetPosition(packet.Position, packet.Yaw);
         }
@@ -225,27 +290,21 @@ public sealed class GameManager : MonoBehaviour
     // PacketDispatcher에서 전달된 원격 플레이어 정지 패킷을 받아 처리합니다.
     private void HandleStop(StopPacket packet)
     {
-        if (remotePlayers.TryGetValue(packet.ActorId, out RemotePlayerController remotePlayer))
+        if (localPlayer != null && packet.ActorId == localPlayer.ActorId)
+        {
+            return;
+        }
+
+        if (!remotePlayers.TryGetValue(packet.ActorId, out RemotePlayerController remotePlayer))
+        {
+            Debug.Log($"[GameManager] Remote player was missing on STOP. Spawn fallback actor={packet.ActorId}");
+            remotePlayer = SpawnRemotePlayer(packet.ActorId, packet.Position, packet.Yaw);
+        }
+
+        if (remotePlayer != null)
         {
             remotePlayer.SetTargetPosition(packet.Position, packet.Yaw);
         }
-    }
-
-    /// 게임 씬에서도 현재 계정을 유지한 채 캐릭터 선택 화면으로 돌아갈 수 있게 합니다.
-    private void BuildReturnButton()
-    {
-        Canvas canvas = RuntimeUiFactory.CreateCanvas("GameMenuCanvas");
-        canvas.sortingOrder = 100;
-        Button returnButton = RuntimeUiFactory.CreateButton(canvas.transform, "ReturnCharacterSelectButton", "캐릭터 선택", new Vector2(0.84f, 0.90f), new Vector2(0.98f, 0.97f), Vector2.zero, Vector2.zero);
-        returnButton.onClick.AddListener(ReturnToCharacterSelect);
-    }
-
-    /// 선택 캐릭터만 비우고 로그인 계정/캐릭터 목록은 유지한 채 선택 씬으로 이동합니다.
-    private void ReturnToCharacterSelect()
-    {
-        CharacterSession.Instance.SetSelectedCharacter(null);
-        SceneFlow.SetNextScene(SceneNames.CharacterSelect);
-        SceneManager.LoadScene(SceneNames.Loading);
     }
 
     /// 씬에 플레이어가 없고 프리팹도 비어 있을 때 테스트 가능한 기본 로컬 플레이어를 생성합니다.
@@ -255,6 +314,8 @@ public sealed class GameManager : MonoBehaviour
         playerObject.name = "RuntimeLocalPlayer";
         playerObject.transform.SetParent(playerRoot, false);
         playerObject.transform.position = Vector3.zero;
+
+        RuntimeMaterialUtility.ApplyColor(playerObject.GetComponent<Renderer>(), new Color(0.9f, 0.25f, 0.2f, 1.0f));
 
         CapsuleCollider collider = playerObject.GetComponent<CapsuleCollider>();
         if (collider != null)
@@ -278,6 +339,7 @@ public sealed class GameManager : MonoBehaviour
         subscribedDispatcher = NetworkManager.Instance.Dispatcher;
         subscribedDispatcher.EnterGameResponseReceived += HandleEnterGameResponse;
         subscribedDispatcher.SpawnReceived += HandleSpawn;
+        subscribedDispatcher.DespawnReceived += HandleDespawn;
         subscribedDispatcher.MoveReceived += HandleMove;
         subscribedDispatcher.StopReceived += HandleStop;
     }
@@ -292,9 +354,15 @@ public sealed class GameManager : MonoBehaviour
 
         subscribedDispatcher.EnterGameResponseReceived -= HandleEnterGameResponse;
         subscribedDispatcher.SpawnReceived -= HandleSpawn;
+        subscribedDispatcher.DespawnReceived -= HandleDespawn;
         subscribedDispatcher.MoveReceived -= HandleMove;
         subscribedDispatcher.StopReceived -= HandleStop;
         subscribedDispatcher = null;
+    }
+
+    private void HandleDespawn(DespawnPacket packet)
+    {
+        DespawnRemotePlayer(packet.ActorId);
     }
 }
 
