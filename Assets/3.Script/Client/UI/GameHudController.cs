@@ -6,6 +6,15 @@ using UnityEngine.UI;
 
 public sealed class GameHudController : MonoBehaviour
 {
+    private static readonly Dictionary<int, string> ItemNames = new Dictionary<int, string>
+    {
+        { 1001, "초보 검" },
+        { 1002, "초보 활" },
+        { 1003, "초보 단검" },
+        { 2001, "천 갑옷" },
+        { 3001, "작은 물약" },
+    };
+
     private readonly Text[] skillSlotTexts = new Text[3];
     private readonly List<Text> inventorySlotTexts = new List<Text>();
     private readonly List<Text> equipmentSlotTexts = new List<Text>();
@@ -272,7 +281,7 @@ public sealed class GameHudController : MonoBehaviour
                 continue;
             }
 
-            inventorySlotTexts[item.SlotIndex].text = $"{GetItemTypeName(item.ItemType)}\nID {item.ItemId}\nx{item.Count}";
+            inventorySlotTexts[item.SlotIndex].text = BuildInventoryItemText(item);
         }
     }
 
@@ -284,9 +293,44 @@ public sealed class GameHudController : MonoBehaviour
         for (int i = 0; i < equipmentSlotTexts.Count && i < slots.Length; i++)
         {
             long itemUid = character != null && character.Equipment != null ? character.Equipment.GetEquippedItemUid(slots[i]) : 0;
-            string itemText = itemUid == 0 ? "비어 있음" : $"UID {itemUid}";
+            InventoryItemData item = FindInventoryItemByUid(character, itemUid);
+            string itemText = item == null ? "비어 있음" : GetItemName(item.ItemId);
             equipmentSlotTexts[i].text = $"{GetEquipSlotName(slots[i])} : {itemText}";
         }
+    }
+
+    // 인벤토리 슬롯에는 서버 내부 ID보다 사용자가 알아볼 수 있는 아이템 이름과 수량을 표시합니다.
+    private string BuildInventoryItemText(InventoryItemData item)
+    {
+        string itemName = GetItemName(item.ItemId);
+        string typeName = GetItemTypeName(item.ItemType);
+        string countText = item.Count > 1 ? $"\nx{item.Count}" : string.Empty;
+        return $"{typeName}\n{itemName}{countText}";
+    }
+
+    // 장비 테이블은 itemUid만 들고 있으므로, 현재 캐릭터 인벤토리에서 실제 아이템 데이터를 찾아 표시합니다.
+    private InventoryItemData FindInventoryItemByUid(CharacterData character, long itemUid)
+    {
+        if (character == null || character.Inventory == null || itemUid == 0)
+        {
+            return null;
+        }
+
+        foreach (InventoryItemData item in character.Inventory)
+        {
+            if (item != null && item.ItemUid == itemUid)
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    // 서버 item_master 전체를 내려주기 전까지 HUD 표시용으로 사용하는 임시 이름 매핑입니다.
+    private string GetItemName(int itemId)
+    {
+        return ItemNames.TryGetValue(itemId, out string itemName) ? itemName : $"Unknown Item {itemId}";
     }
 
     // HUD 버튼은 입력만 담당하고 실제 스킬 패킷 송신은 SkillController에 위임합니다.

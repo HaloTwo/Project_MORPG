@@ -138,10 +138,21 @@ public sealed class GameManager : MonoBehaviour
         ApplyCharacterToLocalPlayer(packet.Character);
     }
 
-    // 임시 캡슐 색으로 직업 차이를 보여줍니다.
+    // 전사는 DoubleL 모델/애니메이션을 붙이고, 아직 모델이 없는 직업은 임시 캡슐 색으로 구분합니다.
     private void ApplyClassVisual(ClassType classType)
     {
         if (localPlayer == null)
+        {
+            return;
+        }
+
+        CharacterVisualController visualController = localPlayer.GetComponent<CharacterVisualController>();
+        if (visualController == null)
+        {
+            visualController = localPlayer.gameObject.AddComponent<CharacterVisualController>();
+        }
+
+        if (visualController.ApplyVisual(classType))
         {
             return;
         }

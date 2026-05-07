@@ -113,6 +113,7 @@ LoginScene / CharacterSelectScene
 accounts
 characters
 character_skills
+item_master
 inventory_items
 equipment
 ```
@@ -120,7 +121,9 @@ equipment
 - `accounts`: 로그인 계정과 비밀번호 해시 저장
 - `characters`: 계정별 캐릭터 이름, 슬롯, 직업, 레벨, 위치 저장
 - `character_skills`: 직업별 기본 스킬 슬롯 저장
-- `inventory_items`, `equipment`: 이후 인벤토리/장비 확장을 위한 기본 테이블
+- `item_master`: 아이템 타입, 장착 슬롯, 기본 공격력/방어력, 최대 중첩 수 관리
+- `inventory_items`: 캐릭터가 소유한 아이템 UID, 수량, 인벤토리 슬롯, 강화 수치 저장
+- `equipment`: 캐릭터 장착 슬롯과 인벤토리 아이템 UID 연결
 
 <details>
 <summary><b>DB 제약 설계 펼치기/닫기</b></summary>
@@ -129,6 +132,9 @@ equipment
 - `accounts.password_hash`에는 서버에서 계산한 해시 문자열을 저장합니다.
 - `characters(account_id, slot_index)`는 UNIQUE로 같은 계정의 같은 슬롯 중복 생성을 막습니다.
 - `slot_index`는 0~2만 허용해 계정당 3칸 구조를 DB에서도 보장합니다.
+- `inventory_items(character_id, slot_index)`는 UNIQUE로 한 캐릭터의 같은 인벤토리 슬롯 중복을 막습니다.
+- `inventory_items.item_id`는 `item_master.item_id`를 참조해 존재하지 않는 아이템 저장을 방지합니다.
+- `equipment.item_uid`는 인벤토리 아이템 UID와 연결해 실제 소유 아이템만 장착 대상으로 사용하도록 설계했습니다.
 - 캐릭터 삭제 시 관련 스킬/인벤토리/장비 데이터가 함께 정리되도록 FK Cascade를 사용합니다.
 
 </details>
@@ -225,6 +231,21 @@ equipment
 
 </details>
 
+<details>
+<summary><b>7일차 - 인벤토리/장비 DB 기반과 채팅 흐름 확장</b></summary>
+
+- `item_master` 테이블을 추가해 아이템 타입, 장착 슬롯, 기본 스탯, 중첩 수를 DB에서 관리
+- 캐릭터 생성 시 직업에 맞는 초보 무기와 포션을 서버에서 지급
+- 지급된 무기는 `equipment` 테이블에 연결해 기본 장착 상태로 저장
+- 캐릭터 목록/입장 응답에 인벤토리 아이템과 장착 슬롯 정보를 함께 포함
+- `inventory_items`, `equipment` 조회 로직을 Repository 계층에 분리
+- `CHAT` 명령을 서버 세션에서 처리하고, 접속 중인 클라이언트에 채팅 메시지를 전달하는 흐름 추가
+
+> 이번 단계에서는 인벤토리 UI 완성보다 서버와 DB가 “캐릭터가 무엇을 소유하고 무엇을 장착 중인지”를 먼저 책임지도록 만들었습니다.
+> 이후 클라이언트 인벤토리/장비창은 이 서버 데이터를 표시하고, 장착/해제 요청을 서버에 보내는 방식으로 확장할 예정입니다.
+
+</details>
+
 ---
 
 ## ✅ 현재 동작 흐름
@@ -243,6 +264,7 @@ equipment
 11. 캐릭터 선택창으로 복귀 가능
 12. 두 클라이언트 접속 시 원격 플레이어 Spawn / Move / Stop 동기화
 13. 인게임 채팅창을 통한 TCP 채팅 송수신 확인
+14. 캐릭터 생성 시 서버가 직업별 기본 아이템 지급 및 장착 정보 저장
 ```
 
 ## 🎥 동작 GIF
@@ -319,8 +341,9 @@ equipment
 
 ## 🚀 다음 개발 예정
 
-- 인벤토리 획득 / 사용 / 장착 구조
-- 장비 스탯 반영
+- 인벤토리 / 장비창 UI 구현
+- 아이템 획득 / 사용 / 장착 / 해제 요청 패킷 구현
+- 장비 스탯을 캐릭터 능력치에 반영
 - 몬스터 Spawn / AI / 전투 타겟팅
 - 스킬 사용 요청과 서버 검증
 - HP / 데미지 계산 서버 처리

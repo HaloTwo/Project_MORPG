@@ -46,10 +46,21 @@ public sealed class SkillController : MonoBehaviour
         SkillPacket packet = new SkillPacket(actorId, skillSlot, skillId, castPosition, castDirection);
 
         NetworkManager.Instance.SendPacket(packet);
+        PlayCharacterAttackAnimation();
         PlayDebugEffect(castPosition, castDirection, skillData);
         ApplyLocalCombatPreview(skillData, castPosition, castDirection);
         SkillUsed?.Invoke(skillSlot, skillData);
         Debug.Log($"[SkillController] {classType} skill slot={skillSlot}, id={skillId}, name={skillData.Name}");
+    }
+
+    // 실제 전투 판정은 서버로 보내고, 클라이언트에서는 입력 즉시 공격 모션만 재생합니다.
+    private void PlayCharacterAttackAnimation()
+    {
+        CharacterVisualController visualController = GetComponent<CharacterVisualController>();
+        if (visualController != null)
+        {
+            visualController.PlayAttack();
+        }
     }
 
     // 1, 2, 3번 퀵슬롯에 연결된 실제 skillId를 꺼냅니다.

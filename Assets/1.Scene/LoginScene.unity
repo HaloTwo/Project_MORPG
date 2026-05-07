@@ -3241,7 +3241,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65c4a5e38bba0044cad8574b0ff783c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkManager
-  serverHost: 192.168.0.2
+  serverHost: 192.168.0.31
   serverPort: 7777
   maxPacketsPerFrame: 64
 --- !u!4 &2119322166
